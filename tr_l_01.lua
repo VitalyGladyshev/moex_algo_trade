@@ -1,21 +1,37 @@
 -- отображение котировок фьючерса на нефть: BRQ9
 function OnInit()	-- событие - инициализация QUIK
+	close_flag = false
 	file_log = io.open("tr_l_01_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
 	PrintDbgStr("tr_l_01: событие - инициализация QUIK")
 	file_log:write(os.date() .. " tr_l_01 запущен (инициализация)\n")
---[[	local request_result_depo_buy = ParamRequest("SPBFUT", "BRQ9", "LAST")
+	-- Чтение tr_l_01.ini
+	file_ini = io.open(getScriptPath() .. "\\tr_l01.ini", "r")
+	if file_ini ~= nil then
+		type_of_inst = file_ini:read("*l")
+		period = file_ini:read("*l")
+		file_ini:close()	
+		PrintDbgStr("tr_l_01: type_of_inst " .. type_of_inst)
+		PrintDbgStr("tr_l_01: period " .. period)
+	else
+		PrintDbgStr("tr_l_01: неудалось открыть ini файл")
+		close_flag = true
+		return false
+	end
+	-- Запрос потока котировок
+	local request_result_depo_buy = ParamRequest("SPBFUT", "BRQ9", "LAST")
 	if request_result_depo_buy then
 		PrintDbgStr("tr_l_01: по инструменту BRQ9 успешно заказан параметр LAST")
 		file_log:write(os.date() .. " по инструменту BRQ9 успешно заказан параметр LAST\n")
 	else
 		PrintDbgStr("tr_l_01: ошибка призаказе параметра LAST по инструменту BRQ9")
 		file_log:write(os.date() .. " ошибка призаказе параметра LAST по инструменту BRQ9\n")
+		close_flag = true
 		return false
-	end ]]
+	end --[[ ]]
 end
 
 function exit_mess()
---	CancelParamRequest("SPBFUT", "BRQ9", "LAST")
+	CancelParamRequest("SPBFUT", "BRQ9", "LAST")
 	file_log:write(os.date() .. " tr_l_01 завершён\n")
 	file_log:close()
 end
@@ -51,6 +67,9 @@ function OnStop()	-- событие - остановка скрипта
 end
 
 function main()
+	if close_flag then
+		return false
+	end
 	if isConnected() then
 		PrintDbgStr("tr_l_01: QUIK подключен к серверу")
 		file_log:write(os.date() .. " QUIK подключен к серверу\n")
