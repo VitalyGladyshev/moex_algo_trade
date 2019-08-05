@@ -93,13 +93,12 @@ end
 function OnStop(flag)	-- событие - остановка скрипта
 	file_log:write(os.date() .. " Событие - остановка скрипта\n")
 	exit_mess()
-	for k, v in ipairs(order_numbers) do
-		PrintDbgStr(tostring(v[1]))
-		PrintDbgStr(tostring(v[2]))
+	for _, val in ipairs(order_requests) do
+		PrintDbgStr(string.format("tr_02: Значение: %s", tostring(val))
+	end	
+	for key, val in ipairs(order_numbers) do
+		PrintDbgStr(string.format("tr_02: Ключ: %s Значение: %s", tostring(key), tostring(val))
 	end
-	--for cn in order_requests do
-	--	PrintDbgStr(tostring(cn))
-	--end
 	return 0
 end
 
