@@ -83,12 +83,10 @@ function Deploying(counter, price)
 	start_deploing = false
 	for cnt = 1, counter do		--PrintDbgStr(string.format("tr_02: price in Deploying: %s", tostring(price)))
 		SendTransBuySell(price + 0.05 * cnt, 1, 'Покупка')
-		sleep(5)
 	end
 	price = price + 10		-- чтобы не срабатывали заявки
 	for cnt = 1, counter do
 		SendTransBuySell(price + 0.05 * cnt, 1, 'Продажа')
-		sleep(5)
 	end	
 end
 
@@ -123,7 +121,12 @@ function SendTransBuySell(price, number, operation)	-- Отправка заявки на покупк
 		transaction['SECCODE'] = instr_name
 		transaction['PRICE'] = tostring(price)
 		transaction['QUANTITY'] = tostring(number)
-		--[[PrintDbgStr(string.format("tr_02: TRANS_ID: %s", transaction['TRANS_ID'])) PrintDbgStr(string.format("tr_02: CLASSCODE: %s", transaction['CLASSCODE']))]]
+		--[[PrintDbgStr(string.format("tr_02: TRANS_ID: %s", transaction['TRANS_ID']))
+		PrintDbgStr(string.format("tr_02: CLASSCODE: %s", transaction['CLASSCODE']))
+		PrintDbgStr(string.format("tr_02: ACTION: %s", transaction['ACTION']))
+		PrintDbgStr(string.format("tr_02: SECCODE: %s", transaction['SECCODE']))
+		PrintDbgStr(string.format("tr_02: PRICE: %s", transaction['PRICE']))
+		PrintDbgStr(string.format("tr_02: QUANTITY: %s", transaction['QUANTITY'])) ]]
 	local result = sendTransaction(transaction)
 	if result ~= "" then
 		PrintDbgStr(string.format("tr_02: Транзакция %s не прошла проверку на стороне терминала QUIK [%s]", transaction.TRANS_ID, result))
@@ -144,8 +147,8 @@ function SendTransClose(close_ID)		-- Снятие заявки
 		transaction['Заявка'] = tostring(close_ID)
 	local result = sendTransaction(transaction)
 	if result ~= "" then
-		PrintDbgStr(string.format("tr_02: Транзакция %s на снятие заявки %s не прошла проверку на стороне терминала QUIK [%s]", free_TRANS_ID, close_ID, result))
-		file_log:write(string.format("%s Транзакция %s на снятие заявки %s не прошла проверку на стороне терминала QUIK [%s]\n", os.date(), free_TRANS_ID, close_ID, result))
+		PrintDbgStr(string.format("tr_02: Транзакция %s не прошла проверку на стороне терминала QUIK [%s]", free_TRANS_ID, result))
+		file_log:write(string.format("%s Транзакция %s не прошла проверку на стороне терминала QUIK [%s]\n", os.date(), free_TRANS_ID, result))
 	else
 		PrintDbgStr(string.format("tr_02: Транзакция %s отправлена. Снятие заявки: %s", free_TRANS_ID, close_ID))
 		file_log:write(string.format("%s Транзакция %s отправлена. Снятие заявки: %s\n", os.date(), free_TRANS_ID, close_ID))
@@ -162,11 +165,21 @@ function OnTransReply(trans_reply)	-- Подтверждение выполнения заявки
 					table.sinsert(MAIN_QUEUE_TRADES, {	trans_id = trans_reply.trans_id, 
 														status = trans_reply.status,
 														order_num = trans_reply.order_num,
-														result_msg = trans_reply.result_msg})
+														result_msg = trans_reply.result_msg}) -- trans_reply.order_num) 
 					order_numbers[trans_reply.trans_id] = trans_reply.order_num -- table.insert(order_numbers, {tostring(trans_reply.trans_id) = tostring(trans_reply.order_num)})
 				end
-			end
-			break
+			end			
+--[[			PrintDbgStr(string.format("tr_02: Получен ответ на транзакцию %i. Статус - %i order_num - %s msg:[%s]", 
+											trans_reply.trans_id, 
+											trans_reply.status, 
+											tostring(trans_reply.order_num), 
+											trans_reply.result_msg))
+			file_log:write(string.format("%s Получен ответ на транзакцию %i. Статус - %i order_num - %s msg:[%s]\n", 
+											os.date(), 
+											trans_reply.trans_id, 
+											trans_reply.status, 
+											tostring(trans_reply.order_num),
+											trans_reply.result_msg)) ]]
 		end
 	end
 end
@@ -209,11 +222,16 @@ function main()
 											MAIN_QUEUE_TRADES[1].status, 
 											tostring(MAIN_QUEUE_TRADES[1].order_num),
 											MAIN_QUEUE_TRADES[1].result_msg))
+			--PrintDbgStr(string.format("tr_02: Обработка в main order_num: %s", tostring(MAIN_QUEUE_TRADES[1])))
+			--file_log:write(string.format("%s Обработка в main order_num: %s\n", os.date(), tostring(MAIN_QUEUE_TRADES[1])))		
 			trans_send_flag = true
+			--close_id = MAIN_QUEUE_TRADES[1]
+			--PrintDbgStr(string.format("tr_02: close_id: %s", tostring(close_id)))
 			table.sremove(MAIN_QUEUE_TRADES, 1)
 		end
 		if (time_counter >= 6000) and (trans_send_flag) then
 			for key, ord in pairs(order_numbers) do
+				PrintDbgStr(string.format("tr_02: Снятие транзакции %s", tostring(ord)))
 				SendTransClose(ord)
 			end
 			time_counter = 0
