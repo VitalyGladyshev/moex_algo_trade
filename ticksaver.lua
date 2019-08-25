@@ -1,5 +1,3 @@
-require("table")
-
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open("ticksaver_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
 	PrintDbgStr("ticksaver: Событие - инициализация QUIK")
@@ -21,8 +19,8 @@ function OnInit()	-- событие - инициализация QUIK
 				PrintDbgStr("ticksaver: По инструменту " .. instr_name .. " успешно заказан параметр LAST")
 				file_log:write(os.date() .. " По инструменту " .. instr_name .. " успешно заказан параметр LAST\n")
 			else
-				PrintDbgStr("ticksaver: Ошибка призаказе параметра LAST по инструменту " .. instr_name)
-				file_log:write(os.date() .. " Ошибка призаказе параметра LAST по инструменту " .. instr_name .. "\n")
+				PrintDbgStr("ticksaver: Ошибка при заказе параметра LAST по инструменту " .. instr_name)
+				file_log:write(os.date() .. " Ошибка при заказе параметра LAST по инструменту " .. instr_name .. "\n")
 			end
 		end
 		file_ini:close()
