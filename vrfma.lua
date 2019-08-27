@@ -106,7 +106,7 @@ function OnParam(class, sec)
 			file_log:write(string.format("%s %s: %.2f\n", os.date(), instr_name, res.param_value))
 			if current_price == res.param_value then
 				return
-			elseif abs(current_price - res.param_value) > order_interval * 1000 then
+			elseif abs(current_price - res.param_value) > order_interval * 200 then
 				PrintDbgStr(string.format("vrfma: Ошибка! Некорректная цена: %.2f", res.param_value))
 				file_log:write(string.format("%s Ошибка! Некорректная цена: %.2f\n", os.date(), res.param_value))
 				return
@@ -198,6 +198,7 @@ function SaveTradesTbl()
 				file_save_table:write("}\n")
 			end
 		end
+		file_save_table:flush()
 		file_save_table:close()
 		return true
 	else
