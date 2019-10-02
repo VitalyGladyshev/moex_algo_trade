@@ -31,6 +31,7 @@ function OnInit()	-- событие - инициализация QUIK
 	end
 	
 	file_name_for_load = getScriptPath() .. "\\trades_tbl.dat"
+	start_deploying = true
 	cold_start = true
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
@@ -106,29 +107,32 @@ function OnParam(class, sec)
 			file_log:write(string.format("%s %s: %.2f\n", os.date(), instr_name, res.param_value))
 			if current_price == res.param_value then
 				return
-			elseif abs(current_price - res.param_value) > order_interval * 200 then
+--[[			elseif abs(current_price - res.param_value) > order_interval * 200 then
 				PrintDbgStr(string.format("vrfma: Ошибка! Некорректная цена: %.2f", res.param_value))
 				file_log:write(string.format("%s Ошибка! Некорректная цена: %.2f\n", os.date(), res.param_value))
-				return
+				return	]]	--Надо задавть ненулевую стартовую цену, иначе эта проверка может ложно сработать при старте
 			else
 				current_price = res.param_value
 			end
 		--инициализация при старте
-			if cold_start then
-				base_price = res.param_value
-				ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
-				return
-			else
-				local delta = trades_tbl[1]["price"] - current_price	--trades_tbl только запонена т.е. первый элемент должен быть
-				whole_part, fractional_part = math.modf(delta/order_interval)
-				base_price = res.param_value + delta - order_interval * whole_part
-				PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
-				file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
-				WarmStart(base_price)
-				return
+			if start_deploying then
+				start_deploying = false
+				if cold_start then
+					base_price = res.param_value
+					ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
+					return
+				else
+					local delta = trades_tbl[1]["price"] - current_price	--trades_tbl толькочто запонена т.е. первый элемент должен быть
+					whole_part, fractional_part = math.modf(delta/order_interval)
+					base_price = res.param_value + delta - order_interval * whole_part
+					PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
+					file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
+					WarmStart(base_price)
+					return
+				end
 			end
 		-- используем ячейку base_price
-			if (current_price > base_price and current_price < base_price + order_interval) or
+--[[			if (current_price > base_price and current_price < base_price + order_interval) or
 				(current_price < base_price and current_price > base_price - order_interval) then
 				local base_price_not_used = true
 				for _, tab in ipairs(trades_tbl) do
@@ -142,24 +146,26 @@ function OnParam(class, sec)
 				elseif base_price_not_used and current_price < base_price then
 					SendTransBuySell(base_price, 1, 'S')
 				end
-			end
+			end	]]
 		end
 	end
 end
 
 function ColdStart(counter, b_price)
+PrintDbgStr(string.format("vrfma: ColdStart"))
 	cold_start = false
 	for cnt = 1, counter do
 		SendTransBuySell(b_price - order_interval * cnt, 1, 'B')
-		sleep(5)
+		sleep(110)
 	end
 	for cnt = 1, counter do
 		SendTransBuySell(b_price + order_interval * cnt, 1, 'S')
-		sleep(5)
+		sleep(110)
 	end	
 end
 
 function WarmStart(b_price)
+PrintDbgStr(string.format("vrfma: WarmStart"))
 	for _, tab in ipairs(trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
 			SendTransBuySell(tab["price"] + order_interval, 1, 'S', tab["number_sys"])
@@ -186,7 +192,7 @@ function SaveTradesTbl()
 		for _, tab in ipairs(trades_tbl) do
 			if tab["status"] == 3 then
 				file_save_table:write("ReadTradesTbl{\n")
-				for key, val in pairs() do
+				for key, val in pairs(tab) do
 					file_save_table:write(" ", key, " = ")
 					if type(val) == "number" then
 						file_save_table:write(val)
@@ -308,6 +314,7 @@ function OnTransReply(trans_reply)	-- Подтверждение выполнения заявки
 end
 
 function OnTrade(trade)	-- событие - QUIK получил сделку
+PrintDbgStr(string.format("vrfma: OnTrade"))
 	for ind_1, tab in pairs(trades_tbl) do
 		if tab["number_sys"] == trade.order_num and tab["status"] ~= 3 then
 			table.sinsert(QUEUE_SAVE_TRADES, {	order_num = trade.order_num,
@@ -338,6 +345,7 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 end
 
 function OrdersVerification(b_price)
+PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_price)))
 --Снимаем лишние заявки
 	for _, tab in pairs(trades_tbl) do
 		if tab["status"] == 2 and tab["twin"] == 0 then
@@ -358,6 +366,7 @@ function OrdersVerification(b_price)
 		for _, tab in pairs(trades_tbl) do
 			if tab["price"] == b_price - order_interval * cnt then
 				pos_not_used = false
+PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
 				break
 			end
 		end
@@ -368,6 +377,7 @@ function OrdersVerification(b_price)
 		for _, tab in pairs(trades_tbl) do
 			if tab["price"] == b_price + order_interval * cnt then
 				pos_not_used = false
+PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
 				break
 			end
 		end
