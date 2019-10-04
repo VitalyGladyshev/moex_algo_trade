@@ -127,7 +127,7 @@ function OnParam(class, sec)
 					base_price = res.param_value + delta - order_interval * whole_part
 					PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
 					file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
-					WarmStart(base_price)
+					WarmStart(base_price, current_price)
 					return
 				end
 			end
@@ -164,17 +164,29 @@ PrintDbgStr(string.format("vrfma: ColdStart"))
 	end	
 end
 
-function WarmStart(b_price)
+function WarmStart(b_price, c_price)
 PrintDbgStr(string.format("vrfma: WarmStart"))
-	for _, tab in ipairs(trades_tbl) do		--ставим twin-ов
+	for _, tab in pairs(trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
-			SendTransBuySell(tab["price"] + order_interval, 1, 'S', tab["number_sys"])
+			if b_price > (tab["price"] + order_interval) then
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + order_interval): %s", tostring(b_price), tostring((tab["price"] + order_interval))))
+				--SendTransBuySell(b_price, 1, 'S', tab["number_sys"])
+			else
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + order_interval): %s", tostring(b_price), tostring((tab["price"] + order_interval))))
+				--SendTransBuySell(tab["price"] + order_interval, 1, 'S', tab["number_sys"])
+			end
 		else
-			SendTransBuySell(tab["price"] - order_interval, 1, 'B', tab["number_sys"])
+			if b_price < (tab["price"] - order_interval) then
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - order_interval): %s", tostring(b_price), tostring((tab["price"] - order_interval))))
+				--SendTransBuySell(b_price, 1, 'B', tab["number_sys"])
+			else
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - order_interval): %s", tostring(b_price), tostring((tab["price"] - order_interval))))
+				--SendTransBuySell(tab["price"] - order_interval, 1, 'B', tab["number_sys"])
+			end
 		end
-		sleep(5)
+		sleep(110)
 	end
-	OrdersVerification(b_price)
+	--OrdersVerification(b_price)
 end
 
 function ReadTradesTbl(tbl)
@@ -347,7 +359,7 @@ end
 function OrdersVerification(b_price)
 PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_price)))
 --Снимаем лишние заявки
-	for _, tab in pairs(trades_tbl) do
+	for k1, tab in pairs(trades_tbl) do
 		if tab["status"] == 2 and tab["twin"] == 0 then
 			if (tab["price"] > b_price and tab["operation"] == 'B') 
 					or (tab["price"] < b_price and tab["operation"] == 'S') then
@@ -363,10 +375,11 @@ PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_pric
 	local pos_not_used
 	for cnt = 1, 10 do
 		pos_not_used = true
-		for _, tab in pairs(trades_tbl) do
-			if tab["price"] == b_price - order_interval * cnt then
+		for k2, tab in pairs(trades_tbl) do
+--PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
+			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) then
 				pos_not_used = false
-PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
+--PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
 				break
 			end
 		end
@@ -374,10 +387,11 @@ PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false це
 			SendTransBuySell(b_price - order_interval * cnt, 1, 'B')
 		end
 		pos_not_used = true
-		for _, tab in pairs(trades_tbl) do
-			if tab["price"] == b_price + order_interval * cnt then
+		for k3, tab in pairs(trades_tbl) do
+--PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
+			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) then
 				pos_not_used = false
-PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
+--PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
 				break
 			end
 		end
