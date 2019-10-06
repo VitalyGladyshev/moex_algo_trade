@@ -20,8 +20,12 @@ function OnInit()	-- событие - инициализация QUIK
 		order_interval = file_ini:read("*l")
 		PrintDbgStr("vrfma: Чтение vrfma.ini. Шаг заявок: " .. order_interval)
 		file_log:write(os.date() .. " Чтение vrfma.ini. Шаг заявок: " .. order_interval .. " \n")
+		profit = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Норма прибыли: " .. profit)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Норма прибыли: " .. profit .. " \n")
 		file_ini:close()
 		order_interval = tonumber(order_interval)
+		profit = tonumber(profit)
 	else
 		load_error = true
 		message("vrfma: Ошибка загрузки vrfma.ini")
@@ -43,6 +47,7 @@ function OnInit()	-- событие - инициализация QUIK
 		end
 	end
 	trades_tbl = {}
+	start_trades_tbl = {}
 	if not cold_start then
 		dofile(file_name_for_load)
 	end
@@ -166,22 +171,22 @@ end
 
 function WarmStart(b_price, c_price)
 PrintDbgStr(string.format("vrfma: WarmStart"))
-	for _, tab in pairs(trades_tbl) do		--ставим twin-ов
+	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
-			if b_price > (tab["price"] + order_interval) then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + order_interval): %s", tostring(b_price), tostring((tab["price"] + order_interval))))
-				--SendTransBuySell(b_price, 1, 'S', tab["number_sys"])
+			if b_price > (tab["price"] + profit) then
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + profit): %s", tostring(b_price), tostring((tab["price"] + profit))))
+				SendTransBuySell(b_price, 1, 'S', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + order_interval): %s", tostring(b_price), tostring((tab["price"] + order_interval))))
-				--SendTransBuySell(tab["price"] + order_interval, 1, 'S', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + profit): %s", tostring(b_price), tostring((tab["price"] + profit))))
+				SendTransBuySell(tab["price"] + profit, 1, 'S', tab["number_sys"])
 			end
 		else
-			if b_price < (tab["price"] - order_interval) then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - order_interval): %s", tostring(b_price), tostring((tab["price"] - order_interval))))
-				--SendTransBuySell(b_price, 1, 'B', tab["number_sys"])
+			if b_price < (tab["price"] - profit) then
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - profit): %s", tostring(b_price), tostring((tab["price"] - profit))))
+				SendTransBuySell(b_price, 1, 'B', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - order_interval): %s", tostring(b_price), tostring((tab["price"] - order_interval))))
-				--SendTransBuySell(tab["price"] - order_interval, 1, 'B', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - profit): %s", tostring(b_price), tostring((tab["price"] - profit))))
+				SendTransBuySell(tab["price"] - profit, 1, 'B', tab["number_sys"])
 			end
 		end
 		sleep(110)
@@ -196,6 +201,12 @@ function ReadTradesTbl(tbl)
 								["operation"] = tbl["operation"], 
 								["status"] = tbl["status"], 
 								["twin"] = tbl["twin"]})
+	table.sinsert(start_trades_tbl, {	["number_my"] = tbl["number_my"], 
+										["number_sys"] = tbl["number_sys"], 
+										["price"] = tbl["price"], 
+										["operation"] = tbl["operation"], 
+										["status"] = tbl["status"], 
+										["twin"] = tbl["twin"]})
 end
  
 function SaveTradesTbl()
@@ -337,9 +348,9 @@ PrintDbgStr(string.format("vrfma: OnTrade"))
 			if tab["twin"] == 0 then
 				tab["status"] = 3
 				if tab["operation"] == 'B' then
-					SendTransBuySell(tab["price"] + order_interval, 1, 'S', tab["number_sys"])
+					SendTransBuySell(tab["price"] + profit, 1, 'S', tab["number_sys"])
 				else
-					SendTransBuySell(tab["price"] - order_interval, 1, 'B', tab["number_sys"])
+					SendTransBuySell(tab["price"] - profit, 1, 'B', tab["number_sys"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
 				for ind_2, tab_2 in pairs(trades_tbl) do
