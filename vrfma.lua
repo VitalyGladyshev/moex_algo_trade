@@ -174,24 +174,24 @@ PrintDbgStr(string.format("vrfma: WarmStart"))
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
 			if b_price > (tab["price"] + profit) then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + profit): %s", tostring(b_price), tostring((tab["price"] + profit))))
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
 				SendTransBuySell(b_price, 1, 'S', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + profit): %s", tostring(b_price), tostring((tab["price"] + profit))))
+				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
 				SendTransBuySell(tab["price"] + profit, 1, 'S', tab["number_sys"])
 			end
 		else
 			if b_price < (tab["price"] - profit) then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - profit): %s", tostring(b_price), tostring((tab["price"] - profit))))
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
 				SendTransBuySell(b_price, 1, 'B', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - profit): %s", tostring(b_price), tostring((tab["price"] - profit))))
+				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
 				SendTransBuySell(tab["price"] - profit, 1, 'B', tab["number_sys"])
 			end
 		end
 		sleep(110)
 	end
-	--OrdersVerification(b_price)
+	OrdersVerification(b_price)
 end
 
 function ReadTradesTbl(tbl)
@@ -213,7 +213,7 @@ function SaveTradesTbl()
 	file_save_table = io.open(getScriptPath() .. "\\trades_tbl.dat", "w+")
 	if file_save_table ~= nil then
 		for _, tab in ipairs(trades_tbl) do
-			if tab["status"] == 3 then
+			if tostring(tab["status"]) == tostring(3) then
 				file_save_table:write("ReadTradesTbl{\n")
 				for key, val in pairs(tab) do
 					file_save_table:write(" ", key, " = ")
@@ -354,8 +354,9 @@ PrintDbgStr(string.format("vrfma: OnTrade"))
 				end
 			else	--сработал twin. Удаляем заявку и twin
 				for ind_2, tab_2 in pairs(trades_tbl) do
-					if tab["twin"] == tab_2["number_sys"] then
+					if tostring(tab["twin"]) == tostring(tab_2["number_sys"]) then
 						trades_tbl[ind_2] = nil
+						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку и twin tab[twin]: %s tab_2[number_sys]: %s, trades_tbl[ind_2]: %s trades_tbl[ind_1]: %s", tostring(tab["twin"]), tostring(tab_2["number_sys"]), tostring(trades_tbl[ind_2]), tostring(trades_tbl[ind_1])))
 						break
 					end
 				end
