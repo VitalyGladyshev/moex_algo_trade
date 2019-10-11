@@ -301,8 +301,9 @@ function SendTransClose(close_ID)		-- Снятие заявки
 	local transaction = {}
 		transaction['TRANS_ID'] = tostring(free_TRANS_ID)
 		transaction['CLASSCODE'] = instr_class
-		transaction['ACTION'] = 'Снятие заявки по номеру'
-		transaction['Заявка'] = tostring(close_ID)
+		transaction['SECCODE'] = instr_name
+		transaction['ACTION'] = 'KILL_ORDER'
+		transaction['ORDER_KEY'] = tostring(close_ID)		--['Заявка'] = tostring(close_ID)		["ORDER_KEY"]=tostring(getItem(ord,orders[i]).order_num)
 	local result = sendTransaction(transaction)
 -- запись в log перенести в main
 	if result ~= "" then
@@ -391,10 +392,10 @@ PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_pric
 	for cnt = 1, 10 do
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
---PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
+PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
 			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) then
 				pos_not_used = false
---PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
+PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
 				break
 			end
 		end
@@ -403,10 +404,10 @@ PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_pric
 		end
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
---PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
+PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
 			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) then
 				pos_not_used = false
---PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
+PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
 				break
 			end
 		end
