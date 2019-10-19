@@ -1,3 +1,11 @@
+--[[
+1 Продумать обработку при quantity больше единицы
+2 Перенести записи в лог файл из обработчиков в main
+3 Исправить ошибку с пропуском заявок (Илья присылал логи)
+4 После отладки уменьшить вывод отладочных сообщений
+5 V Сделать снятие заявок в полночь и запуск торговли в 10:02
+6 Исправить проверку на некорректное значение текущей цены в OnParam
+]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open("vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
 	PrintDbgStr("vrfma: Событие - инициализация QUIK")
@@ -23,9 +31,13 @@ function OnInit()	-- событие - инициализация QUIK
 		profit = file_ini:read("*l")
 		PrintDbgStr("vrfma: Чтение vrfma.ini. Норма прибыли: " .. profit)
 		file_log:write(os.date() .. " Чтение vrfma.ini. Норма прибыли: " .. profit .. " \n")
+		quantity = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Количество бумаг в заявке: " .. quantity)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Количество бумаг в заявке: " .. quantity .. " \n")
 		file_ini:close()
 		order_interval = tonumber(order_interval)
 		profit = tonumber(profit)
+		quantity = tonumber(quantity)
 	else
 		load_error = true
 		message("vrfma: Ошибка загрузки vrfma.ini")
@@ -35,6 +47,8 @@ function OnInit()	-- событие - инициализация QUIK
 	end
 	
 	file_name_for_load = getScriptPath() .. "\\trades_tbl.dat"
+	trade_period = false
+	CheckTradePeriod()
 	start_deploying = true
 	cold_start = true
 	file_load_table = io.open(file_name_for_load, "r")
@@ -42,7 +56,7 @@ function OnInit()	-- событие - инициализация QUIK
 		local current_position = file_load_table:seek() 
 		local size = file_load_table:seek("end")	-- file_load_table:seek("set",current_position)
 		file_load_table:close()
-		if tostring(size) > tostring(0) then
+		if tonumber(size) > 0 then
 			cold_start = false
 		end
 	end
@@ -56,6 +70,7 @@ function OnInit()	-- событие - инициализация QUIK
 	MAIN_QUEUE_TRADES = {}
 	QUEUE_SAVE_TRADES = {}
 	current_price = 0
+	review_price = 0
 	KillAllOrders(instr_class, instr_name, client)
 	
 	local request_result_depo_buy = ParamRequest(instr_class, instr_name, "LAST")
@@ -66,6 +81,26 @@ function OnInit()	-- событие - инициализация QUIK
 		PrintDbgStr("vrfma: Ошибка призаказе параметра LAST по инструменту " .. instr_name)
 		file_log:write(os.date() .. " Ошибка призаказе параметра LAST по инструменту " .. instr_name .. "\n")
 		return false
+	end
+end
+
+function CheckTradePeriod()
+	now_dt = os.date("*t", os.time())	--PrintDbgStr(string.format("vrfma: CheckTradePeriod Сейчас - час: %s минута: %s", tostring(now_dt.hour), tostring(now_dt.min)))
+	if now_dt.hour < 10 then
+		if trade_period then
+			trade_period = false
+			KillAllOrders(instr_class, instr_name, client)
+			PrintDbgStr(string.format("vrfma: Неторговое время FORTS на ММВБ снимаем заявки. Сейчас: %s", tostring(os.date())))
+			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.")
+		end
+	else
+		if now_dt.hour > 10 or now_dt.min > 0 then
+			if not trade_period then
+				trade_period = true
+				PrintDbgStr(string.format("vrfma: Торговый период FORTS на ММВБ. Сейчас: %s", tostring(os.date())))
+				file_log:write(os.date() .. " Торговый период FORTS на ММВБ.")
+			end
+		end
 	end
 end
 
@@ -117,76 +152,84 @@ function OnParam(class, sec)
 				file_log:write(string.format("%s Ошибка! Некорректная цена: %.2f\n", os.date(), res.param_value))
 				return	]]	--Надо задавть ненулевую стартовую цену, иначе эта проверка может ложно сработать при старте
 			else
-				current_price = res.param_value
+				current_price = tonumber(res.param_value)
 			end
-		--инициализация при старте
-			if start_deploying then
-				start_deploying = false
-				if cold_start then
-					base_price = res.param_value
-					ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
-					return
-				else
-					local delta = trades_tbl[1]["price"] - current_price	--trades_tbl толькочто запонена т.е. первый элемент должен быть
-					whole_part, fractional_part = math.modf(delta/order_interval)
-					base_price = res.param_value + delta - order_interval * whole_part
-					PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
-					file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
-					WarmStart(base_price, current_price)
-					return
-				end
-			end
-		-- используем ячейку base_price
---[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
-				(current_price < base_price and current_price > base_price - order_interval) then
-				local base_price_not_used = true
-				for _, tab in pairs(trades_tbl) do
-					if tab["price"] == base_price then
-						base_price_not_used = false
-						break
+			if trade_period then
+			-- инициализация при старте
+				if start_deploying then
+					start_deploying = false
+					if cold_start then
+						base_price = res.param_value
+						ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
+						return
+					else
+						local delta = trades_tbl[1]["price"] - current_price	--trades_tbl толькочто запонена т.е. первый элемент должен быть
+						whole_part, fractional_part = math.modf(delta/order_interval)
+						base_price = res.param_value + delta - order_interval * whole_part
+						PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
+						file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
+						WarmStart(base_price, current_price)
+						return
 					end
 				end
-				if base_price_not_used and current_price > base_price then
-					SendTransBuySell(base_price, 1, 'B')
-				elseif base_price_not_used and current_price < base_price then
-					SendTransBuySell(base_price, 1, 'S')
+			-- при изменении цены на order_interval обновляем заявки
+				if current_price >= review_price + order_interval then
+					PrintDbgStr(string.format("vrfma: review_price"))
+					review_price = tonumber(current_price)
+					OrdersVerification(review_price)
 				end
-			end	]]
+			-- используем ячейку base_price
+	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
+					(current_price < base_price and current_price > base_price - order_interval) then
+					local base_price_not_used = true
+					for _, tab in pairs(trades_tbl) do
+						if tab["price"] == base_price then
+							base_price_not_used = false
+							break
+						end
+					end
+					if base_price_not_used and current_price > base_price then
+						SendTransBuySell(base_price, quantity, 'B')
+					elseif base_price_not_used and current_price < base_price then
+						SendTransBuySell(base_price, quantity, 'S')
+					end
+				end	]]
+			end
 		end
 	end
 end
 
 function ColdStart(counter, b_price)
-PrintDbgStr(string.format("vrfma: ColdStart"))
+	PrintDbgStr(string.format("vrfma: ColdStart"))
 	cold_start = false
 	for cnt = 1, counter do
-		SendTransBuySell(b_price - order_interval * cnt, 1, 'B')
+		SendTransBuySell(b_price - order_interval * cnt, quantity, 'B')
 		sleep(110)
 	end
 	for cnt = 1, counter do
-		SendTransBuySell(b_price + order_interval * cnt, 1, 'S')
+		SendTransBuySell(b_price + order_interval * cnt, quantity, 'S')
 		sleep(110)
 	end	
 end
 
 function WarmStart(b_price, c_price)
-PrintDbgStr(string.format("vrfma: WarmStart"))
+	PrintDbgStr(string.format("vrfma: WarmStart"))
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
-			if tostring(b_price) > tostring(tab["price"] + profit) then
+			if tonumber(b_price) > tonumber(tab["price"]) + profit then
 				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
-				SendTransBuySell(b_price, 1, 'S', tab["number_sys"])
+				SendTransBuySell(b_price, quantity, 'S', tab["number_sys"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
-				SendTransBuySell(tab["price"] + profit, 1, 'S', tab["number_sys"])
+				SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"])
 			end
 		else
-			if tostring(b_price) < tostring(tab["price"] - profit) then
+			if tonumber(b_price) < tonumber(tab["price"]) - profit then
 				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
-				SendTransBuySell(b_price, 1, 'B', tab["number_sys"])
+				SendTransBuySell(b_price, quantity, 'B', tab["number_sys"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
-				SendTransBuySell(tab["price"] - profit, 1, 'B', tab["number_sys"])
+				SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
 			end
 		end
 		sleep(110)
@@ -213,7 +256,7 @@ function SaveTradesTbl()
 	file_save_table = io.open(getScriptPath() .. "\\trades_tbl.dat", "w+")
 	if file_save_table ~= nil then
 		for _, tab in pairs(trades_tbl) do
-			if tostring(tab["status"]) == tostring(3) then
+			if tostring(tab["status"]) == "3" then
 				file_save_table:write("ReadTradesTbl{\n")
 				for key, val in pairs(tab) do
 					file_save_table:write(" ", key, " = ")
@@ -265,7 +308,7 @@ function OnStop(flag)	-- событие - остановка скрипта
 	return 0
 end
 
-function SendTransBuySell(price, quantity, operation, twin_num)	-- Отправка заявки на покупку/продажу
+function SendTransBuySell(price, quant, operation, twin_num)	-- Отправка заявки на покупку/продажу
 	twin_num = twin_num or 0
 	local transaction = {}
 		transaction['TRANS_ID'] = tostring(free_TRANS_ID)
@@ -277,7 +320,7 @@ function SendTransBuySell(price, quantity, operation, twin_num)	-- Отправка заяв
 		transaction['TYPE'] = 'L'
 		transaction['SECCODE'] = instr_name
 		transaction['PRICE'] = tostring(price)
-		transaction['QUANTITY'] = tostring(quantity)
+		transaction['QUANTITY'] = tostring(quant)
 		--[[PrintDbgStr(string.format("vrfma: TRANS_ID: %s", transaction['TRANS_ID'])) PrintDbgStr(string.format("vrfma: CLASSCODE: %s", transaction['CLASSCODE']))]]
 	local result = sendTransaction(transaction)
 -- запись в log перенести в main
@@ -285,15 +328,16 @@ function SendTransBuySell(price, quantity, operation, twin_num)	-- Отправка заяв
 		PrintDbgStr(string.format("vrfma: Транзакция %s не прошла проверку на стороне терминала QUIK [%s]", transaction.TRANS_ID, result))
 		file_log:write(string.format("%s Транзакция %s не прошла проверку на стороне терминала QUIK [%s]\n", os.date(), transaction.TRANS_ID, result))
 	else
-		PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quantity))
-		file_log:write(string.format("%s Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s\n", os.date(), transaction.TRANS_ID, operation, price, quantity))
+		PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
+		file_log:write(string.format("%s Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s\n", os.date(), transaction.TRANS_ID, operation, price, quant))
+		table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+									["number_sys"] = 0, 
+									["price"] = price, 
+									["operation"] = operation, 
+									["status"] = "1", 
+									["twin"] = twin_num,
+									["quantity_current"] = quant}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
 	end
-	table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
-								["number_sys"] = 0, 
-								["price"] = price, 
-								["operation"] = operation, 
-								["status"] = 1, 
-								["twin"] = twin_num}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
 
@@ -312,27 +356,28 @@ function SendTransClose(close_ID)		-- Снятие заявки
 	else
 		PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Снятие заявки: %s", free_TRANS_ID, close_ID))
 		file_log:write(string.format("%s Транзакция %s отправлена. Снятие заявки: %s\n", os.date(), free_TRANS_ID, close_ID))
-	end
-	free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
-	for ind, tab in pairs(trades_tbl) do
-		if tostring(tab["number_sys"]) == tostring(close_ID) then
-			trades_tbl[ind] = nil
+		for ind, tab in pairs(trades_tbl) do
+			if tostring(tab["number_sys"]) == tostring(close_ID) then
+				trades_tbl[ind] = nil
+			end
 		end
 	end
+	free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
 end
 
-function OnTransReply(trans_reply)	-- Подтверждение выполнения заявки
-PrintDbgStr(string.format("vrfma: OnTransReply trans_reply.trans_id: %s", tostring(trans_reply.trans_id)))
+function OnTransReply(trans_reply)	-- Подтверждение заявки
+	PrintDbgStr(string.format("vrfma: OnTransReply trans_reply.trans_id: %s", tostring(trans_reply.trans_id)))
 	for _, tab in pairs(trades_tbl) do
-		PrintDbgStr(string.format("vrfma: 'for' trans_reply.trans_id: %s tab[number_my]: %s trans_reply.status: %s tostring(3): %s", tostring(trans_reply.trans_id), tostring(tab["number_my"]), tostring(trans_reply.status), tostring(3)))
+		PrintDbgStr(string.format("vrfma: 'for' trans_reply.trans_id: %s tab[number_my]: %s trans_reply.status: %s tab[quantity_current]: %s", tostring(trans_reply.trans_id), tostring(tab["number_my"]), tostring(trans_reply.status), tostring(tab["quantity_current"])))
 		if tostring(trans_reply.trans_id) == tostring(tab["number_my"]) then
-			if tostring(trans_reply.status) == tostring(3) then
+			if tostring(trans_reply.status) == "3" then
 				tab["number_sys"] = trans_reply.order_num
-				tab["status"] = 2				
+				tab["status"] = "2"				
 				table.sinsert(MAIN_QUEUE_TRADES, {	trans_id = trans_reply.trans_id, 
 													status = trans_reply.status,
 													order_num = trans_reply.order_num,
-													result_msg = trans_reply.result_msg})
+													result_msg = trans_reply.result_msg,
+													quantity_current = trans_reply.quantity})
 			end
 			break
 		end
@@ -340,21 +385,22 @@ PrintDbgStr(string.format("vrfma: OnTransReply trans_reply.trans_id: %s", tostri
 end
 
 function OnTrade(trade)	-- событие - QUIK получил сделку
-PrintDbgStr(string.format("vrfma: OnTrade trade.order_num: %s", tostring(trade.order_num)))
+	PrintDbgStr(string.format("vrfma: OnTrade trade.order_num: %s", tostring(trade.order_num)))
 	for ind_1, tab in pairs(trades_tbl) do
-		PrintDbgStr(string.format("vrfma: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tostring(3): %s", tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(3)))
-		if tostring(tab["number_sys"]) == tostring(trade.order_num) and tostring(tab["status"]) ~= tostring(3) then
+		PrintDbgStr(string.format("vrfma: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tab[quantity_current]: %s", tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["quantity_current"])))
+		if tostring(tab["number_sys"]) == tostring(trade.order_num) and tostring(tab["status"]) ~= "3" then
 			table.sinsert(QUEUE_SAVE_TRADES, {	order_num = trade.order_num,
 												price = trade.price,
 												operation = tab["operation"],
+												quantity_current = trade.qty,
 												twin = tab["twin"]}) 
 			base_price = tab["price"]
-			if tostring(tab["twin"]) == tostring(0) then
-				tab["status"] = 3
+			if tostring(tab["twin"]) == "0" then
+				tab["status"] = "3"
 				if tab["operation"] == 'B' then
-					SendTransBuySell(tab["price"] + profit, 1, 'S', tab["number_sys"])
+					SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"])
 				else
-					SendTransBuySell(tab["price"] - profit, 1, 'B', tab["number_sys"])
+					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
 				for ind_2, tab_2 in pairs(trades_tbl) do
@@ -373,17 +419,33 @@ PrintDbgStr(string.format("vrfma: OnTrade trade.order_num: %s", tostring(trade.o
 end
 
 function OrdersVerification(b_price)
-PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_price)))
---Снимаем лишние заявки
+	PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_price)))
+--Снимаем лишние заявки и проверяем twin'ы
 	for k1, tab in pairs(trades_tbl) do
-		if tostring(tab["status"]) == tostring(2) and tostring(tab["twin"]) == tostring(0) then
-			if (tostring(tab["price"]) > tostring(b_price) and tostring(tab["operation"]) == 'B') 
-					or (tostring(tab["price"]) < tostring(b_price) and tostring(tab["operation"]) == 'S') then
+		if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
+			if (tonumber(tab["price"]) > tonumber(b_price) and tostring(tab["operation"]) == 'B') 
+					or (tonumber(tab["price"]) < tonumber(b_price) and tostring(tab["operation"]) == 'S') then
 				SendTransClose(tab["number_sys"])
 			end
-			if tostring(tab["price"]) > tostring(b_price + order_interval * 10)
-					or tostring(tab["price"]) < tostring(b_price - order_interval * 10) then
+			if tonumber(tab["price"]) > tonumber(b_price) + order_interval * 10
+					or tonumber(tab["price"]) < tonumber(b_price) - order_interval * 10 then
 				SendTransClose(tab["number_sys"])
+			end
+		end
+		if tostring(tab["status"]) == "3" and tostring(tab["twin"]) == "0" then
+			istwin = false
+			for k4, tab2 in pairs(trades_tbl) do
+				if tostring(tab["number_sys"]) == tostring(tab2["twin"]) then
+					istwin = true
+				end
+			end
+			if not istwin then
+				PrintDbgStr(string.format("vrfma: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", tostring(tab["number_sys"])))
+				if tab["operation"] == 'B' then
+					SendTransBuySell(b_price + profit, quantity, 'S', tab["number_sys"])
+				else
+					SendTransBuySell(b_price - profit, quantity, 'B', tab["number_sys"])
+				end
 			end
 		end
 	end
@@ -392,27 +454,27 @@ PrintDbgStr(string.format("vrfma: OrdersVerification. Цена: %s", tostring(b_pric
 	for cnt = 1, 10 do
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
-PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
+			PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
 			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) then
 				pos_not_used = false
-PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
+				PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
 				break
 			end
 		end
 		if pos_not_used then
-			SendTransBuySell(b_price - order_interval * cnt, 1, 'B')
+			SendTransBuySell(b_price - order_interval * cnt, quantity, 'B')
 		end
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
-PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
+			PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
 			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) then
 				pos_not_used = false
-PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
+				PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
 				break
 			end
 		end
 		if pos_not_used then
-			SendTransBuySell(b_price + order_interval * cnt, 1, 'S')
+			SendTransBuySell(b_price + order_interval * cnt, quantity, 'S')
 		end
 	end
 end
@@ -434,35 +496,76 @@ function main()
 	while true do
 		while #MAIN_QUEUE_TRADES > 0 do	-- # оператор длины массива возвращает наибольший индекс элементов массива
 			-- Разобрать очередь и сохранить в файл и в лог
-			PrintDbgStr(string.format("vrfma: Получен ответ на транзакцию %i Статус - %i order_num - %s msg:[%s]", 
+			PrintDbgStr(string.format("vrfma: Получен ответ на транзакцию %i Статус - %i order_num - %s количество - %i msg:[%s]", 
 											MAIN_QUEUE_TRADES[1].trans_id, 
 											MAIN_QUEUE_TRADES[1].status, 
-											tostring(MAIN_QUEUE_TRADES[1].order_num), 
+											tostring(MAIN_QUEUE_TRADES[1].order_num),
+											MAIN_QUEUE_TRADES[1].quantity_current,
 											MAIN_QUEUE_TRADES[1].result_msg))
-			file_log:write(string.format("%s Получен ответ на транзакцию %i Статус - %i order_num - %s msg:[%s]\n", 
+			file_log:write(string.format("%s Получен ответ на транзакцию %i Статус - %i order_num - %s количество - %i msg:[%s]\n", 
 											os.date(), 
 											MAIN_QUEUE_TRADES[1].trans_id, 
 											MAIN_QUEUE_TRADES[1].status, 
 											tostring(MAIN_QUEUE_TRADES[1].order_num),
+											MAIN_QUEUE_TRADES[1].quantity_current,
 											MAIN_QUEUE_TRADES[1].result_msg))
 			trans_send_flag = true
 			table.sremove(MAIN_QUEUE_TRADES, 1)
 		end
 		while #QUEUE_SAVE_TRADES > 0 do
-			PrintDbgStr(string.format("vrfma: Событие - сделка order_num: %s цена: %s операция: %s twin: %s", 
+			PrintDbgStr(string.format("vrfma: Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s", 
 											tostring(QUEUE_SAVE_TRADES[1].order_num),
 											tostring(QUEUE_SAVE_TRADES[1].price),
 											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
 											tostring(QUEUE_SAVE_TRADES[1].twin)))
-			file_log:write(string.format("%s Событие - сделка order_num: %s цена: %s операция: %s twin: %s\n", 
+			file_log:write(string.format("%s Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s\n", 
 											os.date(), 
 											tostring(QUEUE_SAVE_TRADES[1].order_num),
 											tostring(QUEUE_SAVE_TRADES[1].price),
 											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
 											tostring(QUEUE_SAVE_TRADES[1].twin)))
 			SaveTradesTbl()	-- сохраняем trades_tbl в файл
 			table.sremove(QUEUE_SAVE_TRADES, 1)
 		end
+--[[
+		while #QUEUE_SAVE_TRADES > 0 do
+			PrintDbgStr(string.format("vrfma: Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s", 
+											tostring(QUEUE_SAVE_TRADES[1].order_num),
+											tostring(QUEUE_SAVE_TRADES[1].price),
+											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
+											tostring(QUEUE_SAVE_TRADES[1].twin)))
+			file_log:write(string.format("%s Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s\n", 
+											os.date(), 
+											tostring(QUEUE_SAVE_TRADES[1].order_num),
+											tostring(QUEUE_SAVE_TRADES[1].price),
+											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
+											tostring(QUEUE_SAVE_TRADES[1].twin)))
+			SaveTradesTbl()	-- сохраняем trades_tbl в файл
+			table.sremove(QUEUE_SAVE_TRADES, 1)
+		end
+		while #QUEUE_SAVE_TRADES > 0 do
+			PrintDbgStr(string.format("vrfma: Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s", 
+											tostring(QUEUE_SAVE_TRADES[1].order_num),
+											tostring(QUEUE_SAVE_TRADES[1].price),
+											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
+											tostring(QUEUE_SAVE_TRADES[1].twin)))
+			file_log:write(string.format("%s Событие - сделка order_num: %s цена: %s операция: %s количество - %s twin: %s\n", 
+											os.date(), 
+											tostring(QUEUE_SAVE_TRADES[1].order_num),
+											tostring(QUEUE_SAVE_TRADES[1].price),
+											tostring(QUEUE_SAVE_TRADES[1].operation),
+											tostring(QUEUE_SAVE_TRADES[1].quantity_current),
+											tostring(QUEUE_SAVE_TRADES[1].twin)))
+			SaveTradesTbl()	-- сохраняем trades_tbl в файл
+			table.sremove(QUEUE_SAVE_TRADES, 1)
+		end
+]]
+		CheckTradePeriod()
 		sleep(10)
 	end
 	ExitMess()
