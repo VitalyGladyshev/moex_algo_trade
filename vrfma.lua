@@ -72,7 +72,7 @@ function OnInit()	-- событие - инициализаци€ QUIK
 	QUEUE_ONTRANSREPLY = {}
 	QUEUE_ONTRADE = {}
 	current_price = 0
-	review_price = 0
+	base_price = 0
 	KillAllOrders(instr_class, instr_name, client)
 	
 	local request_result_depo_buy = ParamRequest(instr_class, instr_name, "LAST")
@@ -141,6 +141,12 @@ function KillAllOrders(classCode, secCode, brokerref)	-- ЌашЄл на форуме QUIK и 
 	return errNotExist 
 end
 
+function NewBasePrice(test_price, curr_price)
+	local delta = curr_price - test_price	--local delta = test_price - curr_price
+	whole_part, fractional_part = math.modf(delta/order_interval)
+	return test_price + order_interval * whole_part	--return curr_price + delta - order_interval * whole_part
+end
+
 function OnParam(class, sec)
 	if class == instr_class and sec == instr_name then
 		res = getParamEx(class, sec, "LAST")
@@ -165,20 +171,18 @@ function OnParam(class, sec)
 						ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
 						return
 					else
-						local delta = trades_tbl[1]["price"] - current_price	--trades_tbl толькочто запонена т.е. первый элемент должен быть
-						whole_part, fractional_part = math.modf(delta/order_interval)
-						base_price = res.param_value + delta - order_interval * whole_part
+						base_price = NewBasePrice(tonumber(trades_tbl[1]["price"]), current_price)	--trades_tbl толькочто запонена т.е. первый элемент должен быть
 						PrintDbgStr(string.format("vrfma: ќпределение base_price: %.2f", base_price))
 						file_log:write(string.format("%s ќпределение base_price: %.2f\n", os.date(), base_price))
 						WarmStart(base_price, current_price)
 						return
 					end
 				end
-			-- при изменении цены на order_interval обновл€ем за€вки
-				if current_price >= review_price + order_interval then
-					PrintDbgStr(string.format("vrfma: Review_price"))
-					review_price = tonumber(current_price)
-					OrdersVerification(review_price)
+			-- при изменении цены более чем на order_interval обновл€ем за€вки (при изменении на order_interval должна срабатывать за€вка), если за€вка не обновила base_price сработает эта защита
+				if math.abs(current_price - base_price) > order_interval then
+					PrintDbgStr(string.format("vrfma: ÷ена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
+					base_price = NewBasePrice(base_price, current_price)
+					OrdersVerification(base_price)
 				end
 			-- используем €чейку base_price
 	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
