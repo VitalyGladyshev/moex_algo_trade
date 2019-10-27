@@ -222,19 +222,19 @@ function WarmStart(b_price, c_price)
 	PrintDbgStr(string.format("vrfma: WarmStart"))
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
-			if tonumber(b_price) > tonumber(tab["price"]) + profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price+: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
-				SendTransBuySell(b_price, quantity, 'S', tab["number_sys"])
+			if tonumber(c_price) > tonumber(tab["price"]) + profit then
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s", tostring(c_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
+				SendTransBuySell(c_price, quantity, 'S', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. S. b_price-: %s (tab[price] + profit): %s status: %s", tostring(b_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s", tostring(c_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
 				SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"])
 			end
 		else
-			if tonumber(b_price) < tonumber(tab["price"]) - profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price+: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
-				SendTransBuySell(b_price, quantity, 'B', tab["number_sys"])
+			if tonumber(c_price) < tonumber(tab["price"]) - profit then
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s", tostring(c_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
+				SendTransBuySell(c_price, quantity, 'B', tab["number_sys"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. B. b_price-: %s (tab[price] - profit): %s status: %s", tostring(b_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s", tostring(c_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
 				SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
 			end
 		end
@@ -389,9 +389,9 @@ function OnTransReply(trans_reply)	-- Подтверждение заявки
 end
 
 function OnTrade(trade)	-- событие - QUIK получил сделку
-	PrintDbgStr(string.format("vrfma: OnTrade trade.order_num: %s", tostring(trade.order_num)))
+	PrintDbgStr(string.format("vrfma: OnTrade trade.order_num: %s price: %s", tostring(trade.order_num), trade.price))
 	for ind_1, tab in pairs(trades_tbl) do
-		PrintDbgStr(string.format("vrfma: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tab[quantity_current]: %s", tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["quantity_current"])))
+		-- PrintDbgStr(string.format("vrfma: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tab[quantity_current]: %s", tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["quantity_current"])))
 		if tostring(tab["number_sys"]) == tostring(trade.order_num) and tostring(tab["status"]) ~= "3" then
 			table.sinsert(QUEUE_ONTRADE, {	order_num = trade.order_num,
 											price = trade.price,
@@ -458,7 +458,7 @@ function OrdersVerification(b_price)
 	for cnt = 1, 10 do
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
-			PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
+			-- PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
 			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) and tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
@@ -470,7 +470,7 @@ function OrdersVerification(b_price)
 		end
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
-			PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
+			-- PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
 			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) and tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
