@@ -96,7 +96,7 @@ function CheckTradePeriod()
 			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.")
 		end
 	else
-		if now_dt.hour > 10 or now_dt.min > 0 then
+		if now_dt.hour > 10 and now_dt.min > 0 then
 			if not trade_period then
 				trade_period = true
 				PrintDbgStr(string.format("vrfma: Торговый период FORTS на ММВБ. Сейчас: %s", tostring(os.date())))
