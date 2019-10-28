@@ -7,7 +7,7 @@
 6 Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 ]]
 function OnInit()	-- событие - инициализация QUIK
-	file_log = io.open("vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
+	file_log = io.open(getScriptPath() .. "\\vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
 	PrintDbgStr("vrfma: Событие - инициализация QUIK")
 	file_log:write(os.date() .. " vrfma запущен (инициализация)\n")
 	load_error = false
@@ -368,7 +368,8 @@ function SendTransBuySell(price, quant, operation, twin_num)	-- Отправка заявки 
 		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
 												price = price,
 												operation = operation,
-												quantity = quant})
+												quantity = quant,
+												twin = twin_num})
 	end
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
@@ -529,17 +530,19 @@ function main()
 	trans_send_flag = false
 	while true do
 		while #QUEUE_SENDTRANSBUYSELL > 0 do
-			PrintDbgStr(string.format("vrfma: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s", 
+			PrintDbgStr(string.format("vrfma: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s", 
 											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity)))
-			file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s\n", 
+											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].twin)))
+			file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s\n", 
 											os.date(), 
 											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity)))
+											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].twin)))
 			table.sremove(QUEUE_SENDTRANSBUYSELL, 1)
 		end
 		while #QUEUE_SENDTRANSCLOSE > 0 do
