@@ -202,8 +202,8 @@ function OnParam(class, sec)
 						return
 					end
 				end
-			-- при изменении цены более чем на order_interval обновляем заявки (при изменении на order_interval должна срабатывать заявка), если заявка не обновила base_price сработает эта защита
-				if math.abs(current_price - base_price) > order_interval and not ban_new_ord then
+			-- при изменении цены более чем на order_interval * 1.5 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если заявка не обновила base_price сработает эта защита
+				if math.abs(current_price - base_price) > (order_interval * 1.5) and not ban_new_ord then
 					PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
 					base_price = NewBasePrice(base_price, current_price)
 					OrdersVerification(base_price)
