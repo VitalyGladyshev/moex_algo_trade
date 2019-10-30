@@ -6,6 +6,10 @@
 5 Исправить проверку на некорректное значение текущей цены в OnParam
 6 Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 7 ! Не сошлось количество записей о бумагах с остатком !
+8 При восстановлении twin'ов сделать проверку на текущую цену
+9 Появлялись в таблице заявки со статусом 1
+10 Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
+11 Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона"
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
@@ -64,6 +68,8 @@ function OnInit()	-- событие - инициализация QUIK
 	t2350ko = true
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
+		PrintDbgStr(string.format("vrfma: Загрузка записей из trades_tbl.dat"))
+		file_log:write(string.format("%s Загрузка записей из trades_tbl.dat\n", os.date()))
 		local current_position = file_load_table:seek() 
 		local size = file_load_table:seek("end")	-- file_load_table:seek("set",current_position)
 		file_load_table:close()
@@ -203,8 +209,8 @@ function OnParam(class, sec)
 						return
 					end
 				end
-			-- при изменении цены более чем на order_interval * 1.5 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если заявка не обновила base_price сработает эта защита
-				if math.abs(current_price - base_price) > (order_interval * 1.5) and not ban_new_ord then
+			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если заявка не обновила base_price сработает эта защита
+				if math.abs(current_price - base_price) > (order_interval * 1.6) and not ban_new_ord then
 					PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
 					base_price = NewBasePrice(base_price, current_price)
 					OrdersVerification(base_price)
@@ -232,6 +238,7 @@ end
 
 function ColdStart(counter, b_price)
 	PrintDbgStr(string.format("vrfma: ColdStart"))
+	file_log:write(string.format("%s ColdStart\n", os.date()))
 	cold_start = false
 	for cnt = 1, counter do
 		SendTransBuySell(b_price - order_interval * cnt, quantity, 'B')
@@ -245,6 +252,7 @@ end
 
 function WarmStart(b_price, c_price)
 	PrintDbgStr(string.format("vrfma: WarmStart"))
+	file_log:write(string.format("%s WarmStart\n", os.date()))
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
 			if tonumber(c_price) > tonumber(tab["price"]) + profit then
@@ -276,13 +284,30 @@ function ReadTradesTbl(tbl)
 								["price"] = tbl["price"], 
 								["operation"] = tbl["operation"], 
 								["status"] = tbl["status"], 
-								["twin"] = tbl["twin"]})
+								["twin"] = tbl["twin"],
+								["quantity_current"] = tbl["quantity_current"]})
 	table.sinsert(start_trades_tbl, {	["number_my"] = tbl["number_my"], 
 										["number_sys"] = tbl["number_sys"], 
 										["price"] = tbl["price"], 
 										["operation"] = tbl["operation"], 
 										["status"] = tbl["status"], 
-										["twin"] = tbl["twin"]})
+										["twin"] = tbl["twin"],
+										["quantity_current"] = tbl["quantity_current"]})
+	PrintDbgStr(string.format("vrfma: Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s", 
+									tostring(tbl["number_sys"]),
+									tostring(tbl["price"]),
+									tostring(tbl["operation"]),
+									tostring(tbl["quantity_current"]),
+									tostring(tbl["status"]),
+									tostring(tbl["twin"])))
+	file_log:write(string.format("%s Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s\n", 
+									os.date(), 
+									tostring(tbl["number_sys"]),
+									tostring(tbl["price"]),
+									tostring(tbl["operation"]),
+									tostring(tbl["quantity_current"]),
+									tostring(tbl["status"]),
+									tostring(tbl["twin"])))
 end
  
 function SaveTradesTbl()
@@ -290,6 +315,7 @@ function SaveTradesTbl()
 	if file_save_table ~= nil then
 		for _, tab in pairs(trades_tbl) do
 			if tostring(tab["status"]) == "3" then
+				PrintDbgStr(string.format("vrfma: trades_tbl распечатываем то, что сохраняем в файл. Номер: %s Статус: %s Операция: %s Цена: %s twin: %s", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"]), tostring(tab["twin"])))
 				file_save_table:write("ReadTradesTbl{\n")
 				for key, val in pairs(tab) do
 					file_save_table:write(" ", key, " = ")
@@ -320,8 +346,8 @@ function ExitMess()
 	PrintDbgStr("vrfma: Заявки: ")
 	file_log:write(string.format("%s Таблица заявок и сделок:\n", os.date()))
 	for _, tab in pairs(trades_tbl) do
-		PrintDbgStr(string.format("vrfma: Номер: %s Статус: %i Операция: %s Цена: %s", tostring(tab["number_sys"]), tab["status"], tostring(tab["operation"]), tostring(tab["price"])))
-		file_log:write(string.format("	Номер: %s Статус: %i Операция: %s Цена: %s\n", tostring(tab["number_sys"]), tab["status"], tostring(tab["operation"]), tostring(tab["price"])))
+		PrintDbgStr(string.format("vrfma: Номер: %s Статус: %s Операция: %s Цена: %s", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"])))
+		file_log:write(string.format("	Номер: %s Статус: %s Операция: %s Цена: %s\n", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"])))
 	end	
 	KillAllOrders(instr_class, instr_name, client)
 	PrintDbgStr("vrfma: vrfma завершён")
@@ -331,7 +357,7 @@ end
 
 function OnClose()	-- событие - закрытие терминала QUIK
 	file_log:write(os.date() .. " Событие - закрытие терминала QUIK\n")
-	ExitMess()
+	-- ExitMess()
 	return 0
 end
 
@@ -342,7 +368,7 @@ function OnStop(flag)	-- событие - остановка скрипта
 end
 
 function SendTransBuySell(price, quant, operation, twin_num)	-- Отправка заявки на покупку/продажу
-	twin_num = twin_num or 0
+	twin_num = twin_num or "0"
 	local transaction = {}
 		transaction['TRANS_ID'] = tostring(free_TRANS_ID)
 		transaction['CLASSCODE'] = instr_class
@@ -437,14 +463,34 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
+for ind_n, tab_n in pairs(trades_tbl) do
+	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем до удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s", 
+										tostring(tab_n["number_my"]), 
+										tostring(tab_n["number_sys"]), 
+										tostring(tab_n["status"]), 
+										tostring(tab_n["operation"]), 
+										tostring(tab_n["price"]), 
+										tostring(tab_n["twin"]),
+										tostring(tab_n["quantity_current"])))
+end
 				for ind_2, tab_2 in pairs(trades_tbl) do
 					if tostring(tab["twin"]) == tostring(tab_2["number_sys"]) then
-						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку и twin tab[twin]: %s tab_2[number_sys]: %s, trades_tbl[ind_2]: %s trades_tbl[ind_1]: %s", tostring(tab["twin"]), tostring(tab_2["number_sys"]), tostring(trades_tbl[ind_2]), tostring(trades_tbl[ind_1])))
+						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", tostring(tab_n["number_sys"]), tostring(tab["number_sys"]), tostring(tab["twin"]), tostring(tab_2["number_sys"])))
 						trades_tbl[ind_2] = nil
 						break
 					end
 				end
 				trades_tbl[ind_1] = nil
+for ind_n, tab_n in pairs(trades_tbl) do
+	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s", 
+										tostring(tab_n["number_my"]), 
+										tostring(tab_n["number_sys"]), 
+										tostring(tab_n["status"]), 
+										tostring(tab_n["operation"]), 
+										tostring(tab_n["price"]), 
+										tostring(tab_n["twin"]),
+										tostring(tab_n["quantity_current"])))
+end
 			end
 			if not ban_new_ord then
 				OrdersVerification(base_price)
