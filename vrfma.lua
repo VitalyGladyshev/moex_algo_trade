@@ -11,7 +11,7 @@
 10 Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
 11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
 12 Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
-13 За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
+13 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 ]]
 function OnInit()	-- событие - инициализация QUIK
@@ -299,19 +299,47 @@ function WarmStart(b_price, c_price)
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
 			if tonumber(c_price) > tonumber(tab["price"]) + profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s", tostring(c_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
-				SendTransBuySell(c_price, quantity, 'S', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(c_price), 
+									tostring(tab["price"] + profit), 
+									tostring(tab["status"]),
+									tostring(tab["account"]),
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
+				SendTransBuySell(c_price, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s", tostring(c_price), tostring((tab["price"] + profit)), tostring(tab["status"])))
-				SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(c_price), 
+									tostring(tab["price"] + profit), 
+									tostring(tab["status"]),
+									tostring(tab["account"]),
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
+				SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			end
 		else
 			if tonumber(c_price) < tonumber(tab["price"]) - profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s", tostring(c_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
-				SendTransBuySell(c_price, quantity, 'B', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(c_price), 
+									tostring(tab["price"] - profit), 
+									tostring(tab["status"]),
+									tostring(tab["account"]),
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
+				SendTransBuySell(c_price, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s", tostring(c_price), tostring((tab["price"] - profit)), tostring(tab["status"])))
-				SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(c_price), 
+									tostring(tab["price"] - profit), 
+									tostring(tab["status"]),
+									tostring(tab["account"]),
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
+				SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			end
 		end
 		sleep(110)
@@ -328,29 +356,45 @@ function ReadTradesTbl(tbl)
 								["operation"] = tbl["operation"], 
 								["status"] = tbl["status"], 
 								["twin"] = tbl["twin"],
-								["quantity_current"] = tbl["quantity_current"]})
+								["quantity_current"] = tbl["quantity_current"],
+								["account"] = tbl["account"],
+								["client"] = tbl["client"],
+								["instr_name"] = tbl["instr_name"],
+								["instr_class"] = tbl["instr_class"] })
 	table.sinsert(start_trades_tbl, {	["number_my"] = tbl["number_my"], 
 										["number_sys"] = tbl["number_sys"], 
 										["price"] = tbl["price"], 
 										["operation"] = tbl["operation"], 
 										["status"] = tbl["status"], 
 										["twin"] = tbl["twin"],
-										["quantity_current"] = tbl["quantity_current"]})
-	PrintDbgStr(string.format("vrfma: Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s", 
+										["quantity_current"] = tbl["quantity_current"],
+										["account"] = tbl["account"],
+										["client"] = tbl["client"],
+										["instr_name"] = tbl["instr_name"],
+										["instr_class"] = tbl["instr_class"] })
+	PrintDbgStr(string.format("vrfma: Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s", 
 									tostring(tbl["number_sys"]),
 									tostring(tbl["price"]),
 									tostring(tbl["operation"]),
 									tostring(tbl["quantity_current"]),
 									tostring(tbl["status"]),
-									tostring(tbl["twin"])))
-	file_log:write(string.format("%s Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s\n", 
+									tostring(tbl["twin"]),
+									tostring(tbl["account"]),
+									tostring(tbl["client"]),
+									tostring(tbl["instr_name"]),
+									tostring(tbl["instr_class"])))
+	file_log:write(string.format("%s Згрузили запись: транзакция %s цена: %s операция: %s количество: %s статус: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s\n", 
 									os.date(), 
 									tostring(tbl["number_sys"]),
 									tostring(tbl["price"]),
 									tostring(tbl["operation"]),
 									tostring(tbl["quantity_current"]),
 									tostring(tbl["status"]),
-									tostring(tbl["twin"])))
+									tostring(tbl["twin"]),
+									tostring(tbl["account"]),
+									tostring(tbl["client"]),
+									tostring(tbl["instr_name"]),
+									tostring(tbl["instr_class"])))
 end
  
 function SaveTradesTbl()
@@ -358,7 +402,16 @@ function SaveTradesTbl()
 	if file_save_table ~= nil then
 		for _, tab in pairs(trades_tbl) do
 			if tostring(tab["status"]) == "3" then
-				PrintDbgStr(string.format("vrfma: trades_tbl распечатываем то, что сохраняем в файл. Номер: %s Статус: %s Операция: %s Цена: %s twin: %s", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"]), tostring(tab["twin"])))
+				PrintDbgStr(string.format("vrfma: trades_tbl распечатываем то, что сохраняем в файл. Номер: %s Статус: %s Операция: %s Цена: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(tab["number_sys"]), 
+									tostring(tab["status"]), 
+									tostring(tab["operation"]), 
+									tostring(tab["price"]), 
+									tostring(tab["twin"]),
+									tostring(tab["account"]),
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
 				file_save_table:write("ReadTradesTbl{\n")
 				for key, val in pairs(tab) do
 					file_save_table:write(" ", key, " = ")
@@ -389,8 +442,24 @@ function ExitMess()
 	PrintDbgStr("vrfma: Заявки: ")
 	file_log:write(string.format("%s Таблица заявок и сделок:\n", os.date()))
 	for _, tab in pairs(trades_tbl) do
-		PrintDbgStr(string.format("vrfma: Номер: %s Статус: %s Операция: %s Цена: %s", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"])))
-		file_log:write(string.format("	Номер: %s Статус: %s Операция: %s Цена: %s\n", tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["operation"]), tostring(tab["price"])))
+		PrintDbgStr(string.format("vrfma: Номер: %s Статус: %s Операция: %s Цена: %s account: %s client: %s instr_name: %s instr_class: %s", 
+									tostring(tab["number_sys"]), 
+									tostring(tab["status"]), 
+									tostring(tab["operation"]), 
+									tostring(tab["price"]), 
+									tostring(tab["account"]), 
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
+		file_log:write(string.format("	Номер: %s Статус: %s Операция: %s Цена: %s account: %s client: %s instr_name: %s instr_class: %s\n", 
+									tostring(tab["number_sys"]), 
+									tostring(tab["status"]), 
+									tostring(tab["operation"]), 
+									tostring(tab["price"]),
+									tostring(tab["account"]), 
+									tostring(tab["client"]),
+									tostring(tab["instr_name"]),
+									tostring(tab["instr_class"])))
 	end	
 	KillAllOrders(instr_class, instr_name, client)
 	PrintDbgStr("vrfma: vrfma завершён")
@@ -410,19 +479,25 @@ function OnStop(flag)	-- событие - остановка скрипта
 	return 0
 end
 
-function SendTransBuySell(price, quant, operation, twin_num)	-- Отправка заявки на покупку/продажу
+function SendTransBuySell(price, quant, operation, account_in, client_in, instr_name_in, instr_class_in, twin_num)	-- Отправка заявки на покупку/продажу
+	account_in = account_in or account
+	client_in = client_in or client
+	instr_name_in = instr_name_in or instr_name
+	instr_class_in = instr_class_in or instr_class
 	twin_num = twin_num or "0"
+	
 	local transaction = {}
-		transaction['TRANS_ID'] = tostring(free_TRANS_ID)
-		transaction['CLASSCODE'] = instr_class
-		transaction['ACTION'] = 'NEW_ORDER'
-		transaction['ACCOUNT'] = account
-		transaction['CLIENT_CODE'] = client
-		transaction['OPERATION'] = operation
-		transaction['TYPE'] = 'L'
-		transaction['SECCODE'] = instr_name
-		transaction['PRICE'] = tostring(price)
-		transaction['QUANTITY'] = tostring(quant)
+	transaction['TRANS_ID'] = tostring(free_TRANS_ID)
+	transaction['ACCOUNT'] = account_in
+	transaction['CLIENT_CODE'] = client_in
+	transaction['SECCODE'] = instr_name_in
+	transaction['CLASSCODE'] = instr_class_in
+	transaction['PRICE'] = tostring(price)
+	transaction['QUANTITY'] = tostring(quant)
+	transaction['OPERATION'] = operation
+	transaction['ACTION'] = 'NEW_ORDER'
+	transaction['TYPE'] = 'L'
+
 	local result = sendTransaction(transaction)
 	if result ~= "" then
 		PrintDbgStr(string.format("vrfma: Транзакция %s не прошла проверку на стороне терминала QUIK [%s]", transaction.TRANS_ID, result))
@@ -434,12 +509,20 @@ function SendTransBuySell(price, quant, operation, twin_num)	-- Отправка заявки 
 									["operation"] = operation, 
 									["status"] = "1", 
 									["twin"] = twin_num,
-									["quantity_current"] = quant}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
+									["quantity_current"] = quant,
+									["account"] = account_in,
+									["client"] = client_in,
+									["instr_name"] = instr_name_in,
+									["instr_class"] = instr_class_in}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
 		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
 												price = price,
 												operation = operation,
 												quantity = quant,
-												twin = twin_num})
+												twin = twin_num,
+												account = account_in,
+												client = client_in,
+												instr_name = instr_name_in,
+												instr_class = instr_class_in })
 	end
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
@@ -480,7 +563,11 @@ function OnTransReply(trans_reply)	-- Подтверждение заявки
 													status = trans_reply.status,
 													order_num = trans_reply.order_num,
 													result_msg = trans_reply.result_msg,
-													quantity_current = trans_reply.quantity})
+													quantity_current = trans_reply.quantity,
+													account = tab["account"],
+													client = tab["client"],
+													instr_name = tab["instr_name"],
+													instr_class = tab["instr_class"] })
 			end
 			break
 		end
@@ -496,7 +583,11 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 											price = trade.price,
 											operation = tab["operation"],
 											quantity_current = trade.qty,
-											twin = tab["twin"]}) 
+											twin = tab["twin"],
+											account = tab["account"],
+											client = tab["client"],
+											instr_name = tab["instr_name"],
+											instr_class = tab["instr_class"] })
 			base_price = tab["price"]
 			if tostring(tab["twin"]) == "0" then
 				tab["status"] = "3"
@@ -507,14 +598,18 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 				end
 			else	--сработал twin. Удаляем заявку и twin
 for ind_n, tab_n in pairs(trades_tbl) do
-	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем до удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s", 
+	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем до удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 										tostring(tab_n["number_my"]), 
 										tostring(tab_n["number_sys"]), 
 										tostring(tab_n["status"]), 
 										tostring(tab_n["operation"]), 
 										tostring(tab_n["price"]), 
 										tostring(tab_n["twin"]),
-										tostring(tab_n["quantity_current"])))
+										tostring(tab_n["quantity_current"]),
+										tostring(tab_n["account"]),
+										tostring(tab_n["client"]),
+										tostring(tab_n["instr_name"]),
+										tostring(tab_n["instr_class"])))
 end
 				for ind_2, tab_2 in pairs(trades_tbl) do
 					if tostring(tab["twin"]) == tostring(tab_2["number_sys"]) then
@@ -525,14 +620,18 @@ end
 				end
 				trades_tbl[ind_1] = nil
 for ind_n, tab_n in pairs(trades_tbl) do
-	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s", 
+	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 										tostring(tab_n["number_my"]), 
 										tostring(tab_n["number_sys"]), 
 										tostring(tab_n["status"]), 
 										tostring(tab_n["operation"]), 
 										tostring(tab_n["price"]), 
 										tostring(tab_n["twin"]),
-										tostring(tab_n["quantity_current"])))
+										tostring(tab_n["quantity_current"]),
+										tostring(tab_n["account"]),
+										tostring(tab_n["client"]),
+										tostring(tab_n["instr_name"]),
+										tostring(tab_n["instr_class"])))
 end
 			end
 			if not ban_new_ord then
@@ -620,19 +719,27 @@ function main()
 	trans_send_flag = false
 	while true do
 		while #QUEUE_SENDTRANSBUYSELL > 0 do
-			PrintDbgStr(string.format("vrfma: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s", 
+			PrintDbgStr(string.format("vrfma: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s", 
 											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].twin)))
-			file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s\n", 
+											tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].account),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].client),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class)))
+			file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s\n", 
 											os.date(), 
 											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
 											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].twin)))
+											tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].account),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].client),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
+											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class)))
 			table.sremove(QUEUE_SENDTRANSBUYSELL, 1)
 		end
 		while #QUEUE_SENDTRANSCLOSE > 0 do
@@ -648,36 +755,52 @@ function main()
 			table.sremove(QUEUE_SENDTRANSCLOSE, 1)
 		end
 		while #QUEUE_ONTRANSREPLY > 0 do	-- # оператор длины массива возвращает наибольший индекс элементов массива
-			PrintDbgStr(string.format("vrfma: Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i msg:[%s]", 
+			PrintDbgStr(string.format("vrfma: Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]", 
 											tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
 											QUEUE_ONTRANSREPLY[1].status, 
 											tostring(QUEUE_ONTRANSREPLY[1].order_num),
 											QUEUE_ONTRANSREPLY[1].quantity_current,
+											QUEUE_ONTRANSREPLY[1].account,
+											QUEUE_ONTRANSREPLY[1].client,
+											QUEUE_ONTRANSREPLY[1].instr_name,
+											QUEUE_ONTRANSREPLY[1].instr_class,
 											QUEUE_ONTRANSREPLY[1].result_msg))
-			file_log:write(string.format("%s Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i msg:[%s]\n", 
+			file_log:write(string.format("%s Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]\n", 
 											os.date(), 
 											tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
 											QUEUE_ONTRANSREPLY[1].status, 
 											tostring(QUEUE_ONTRANSREPLY[1].order_num),
 											QUEUE_ONTRANSREPLY[1].quantity_current,
+											QUEUE_ONTRANSREPLY[1].account,
+											QUEUE_ONTRANSREPLY[1].client,
+											QUEUE_ONTRANSREPLY[1].instr_name,
+											QUEUE_ONTRANSREPLY[1].instr_class,
 											QUEUE_ONTRANSREPLY[1].result_msg))
 			trans_send_flag = true
 			table.sremove(QUEUE_ONTRANSREPLY, 1)
 		end
 		while #QUEUE_ONTRADE > 0 do
-			PrintDbgStr(string.format("vrfma: Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s", 
+			PrintDbgStr(string.format("vrfma: Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s", 
 											tostring(QUEUE_ONTRADE[1].order_num),
 											tostring(QUEUE_ONTRADE[1].price),
 											tostring(QUEUE_ONTRADE[1].operation),
 											tostring(QUEUE_ONTRADE[1].quantity_current),
-											tostring(QUEUE_ONTRADE[1].twin)))
-			file_log:write(string.format("%s Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s\n", 
+											tostring(QUEUE_ONTRADE[1].twin),
+											tostring(QUEUE_ONTRADE[1].account),
+											tostring(QUEUE_ONTRADE[1].client),
+											tostring(QUEUE_ONTRADE[1].instr_name),
+											tostring(QUEUE_ONTRADE[1].instr_class)))
+			file_log:write(string.format("%s Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s\n", 
 											os.date(), 
 											tostring(QUEUE_ONTRADE[1].order_num),
 											tostring(QUEUE_ONTRADE[1].price),
 											tostring(QUEUE_ONTRADE[1].operation),
 											tostring(QUEUE_ONTRADE[1].quantity_current),
-											tostring(QUEUE_ONTRADE[1].twin)))
+											tostring(QUEUE_ONTRADE[1].twin),
+											tostring(QUEUE_ONTRADE[1].account),
+											tostring(QUEUE_ONTRADE[1].client),
+											tostring(QUEUE_ONTRADE[1].instr_name),
+											tostring(QUEUE_ONTRADE[1].instr_class)))
 			SaveTradesTbl()	-- сохраняем trades_tbl в файл
 			table.sremove(QUEUE_ONTRADE, 1)
 		end
