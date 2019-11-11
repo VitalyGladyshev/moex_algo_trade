@@ -213,25 +213,22 @@ function OnParam(class, sec)
 			if trade_period then
 				if auto_border_check then
 				-- провер€ем на соответствие границам рабочего диапазона
-					if current_price < above_border or current_price > below_border then
-						if ban_new_ord and (current_price < (above_border * 0.985) or current_price > (below_border * 1.015)) then
-							ban_new_ord = false
-							PrintDbgStr(string.format("vrfma: ¬ернулись в рабочий диапазон current_price: %.2f base_price: %.2f", current_price, base_price))
-							file_log:write(string.format("%s ¬ернулись в рабочий диапазон current_price: %.2f base_price: %.2f\n", os.date(), current_price, base_price))
-							base_price = NewBasePrice(base_price, current_price)
-							OrdersVerification(base_price)
-						end
-					else
+					if ban_new_ord and current_price < (above_border * 0.988) and current_price > (below_border * 1.015) then
+						ban_new_ord = false
+						PrintDbgStr(string.format("vrfma: ¬ернулись в рабочий диапазон current_price: %.2f base_price: %.2f", current_price, base_price))
+						file_log:write(string.format("%s ¬ернулись в рабочий диапазон current_price: %.2f base_price: %.2f\n", os.date(), current_price, base_price))
+						base_price = NewBasePrice(base_price, current_price)
+						OrdersVerification(base_price)
+					end
+					if not ban_new_ord and (current_price > above_border or current_price < below_border) then
 				-- вышли за границу диапазона. ќставл€ем за€вки только нареализацию
-						if not ban_new_ord then
-							ban_new_ord = true
-							PrintDbgStr(string.format("vrfma: ¬ышли за границу рабочего диапазона current_price: %.2f", current_price))
-							file_log:write(string.format("%s ¬ышли за границу рабочего диапазона current_price: %.2f\n", os.date(), current_price))
-						--—нимаем лишние за€вки и провер€ем twin'ы
-							for k, tab in pairs(trades_tbl) do
-								if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
-									SendTransClose(tab["number_sys"])
-								end
+						ban_new_ord = true
+						PrintDbgStr(string.format("vrfma: ¬ышли за границу рабочего диапазона current_price: %.2f", current_price))
+						file_log:write(string.format("%s ¬ышли за границу рабочего диапазона current_price: %.2f\n", os.date(), current_price))
+					--—нимаем лишние за€вки
+						for k, tab in pairs(trades_tbl) do
+							if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
+								SendTransClose(tab["number_sys"])
 							end
 						end
 					end
