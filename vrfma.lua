@@ -9,7 +9,7 @@
 8 При восстановлении twin'ов сделать проверку на текущую цену
 9 Появлялись в таблице заявки со статусом 1
 10 Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
-11 Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
+11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
 12 Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
@@ -45,10 +45,21 @@ function OnInit()	-- событие - инициализация QUIK
 		ban_new_ord = file_ini:read("*l")
 		PrintDbgStr("vrfma: Чтение vrfma.ini. Запрет новых заявок: " .. ban_new_ord)
 		file_log:write(os.date() .. " Чтение vrfma.ini. Запрет новых заявок: " .. ban_new_ord .. " \n")
+		auto_border_check = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Автоматическая проверка границ рабочего режима: " .. auto_border_check)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Автоматическая проверка границ рабочего режима: " .. auto_border_check .. " \n")
+		above_border = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Верхняя граница рабочего диапазона: " .. above_border)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Верхняя граница рабочего диапазона: " .. above_border .. " \n")
+		below_border = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Нижняя граница рабочего диапазона: " .. below_border)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Нижняя граница рабочего диапазона: " .. below_border .. " \n")
 		file_ini:close()
 		order_interval = tonumber(order_interval)
 		profit = tonumber(profit)
 		quantity = tonumber(quantity)
+		above_border = tonumber(above_border)
+		below_border = tonumber(below_border)
 	else
 		load_error = true
 		message("vrfma: Ошибка загрузки vrfma.ini")
@@ -61,6 +72,11 @@ function OnInit()	-- событие - инициализация QUIK
 		ban_new_ord = false
 	else
 		ban_new_ord = true
+	end
+	if tostring(auto_border_check) == "false" then
+		auto_border_check = false
+	else
+		auto_border_check = true
 	end
 	file_name_for_load = getScriptPath() .. "\\trades_tbl.dat"
 	trade_period = false
@@ -195,6 +211,31 @@ function OnParam(class, sec)
 				current_price = tonumber(res.param_value)
 			end
 			if trade_period then
+				if auto_border_check then
+				-- проверяем на соответствие границам рабочего диапазона
+					if current_price < above_border or current_price > below_border then
+						if ban_new_ord and (current_price < (above_border * 0.985) or current_price > (below_border * 1.015)) then
+							ban_new_ord = false
+							PrintDbgStr(string.format("vrfma: Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f", current_price, base_price))
+							file_log:write(string.format("%s Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f\n", os.date(), current_price, base_price))
+							base_price = NewBasePrice(base_price, current_price)
+							OrdersVerification(base_price)
+						end
+					else
+				-- вышли за границу диапазона. Оставляем заявки только нареализацию
+						if not ban_new_ord then
+							ban_new_ord = true
+							PrintDbgStr(string.format("vrfma: Вышли за границу рабочего диапазона current_price: %.2f", current_price))
+							file_log:write(string.format("%s Вышли за границу рабочего диапазона current_price: %.2f\n", os.date(), current_price))
+						--Снимаем лишние заявки и проверяем twin'ы
+							for k, tab in pairs(trades_tbl) do
+								if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
+									SendTransClose(tab["number_sys"])
+								end
+							end
+						end
+					end
+				end
 			-- инициализация при старте
 				if start_deploying then
 					start_deploying = false
@@ -212,12 +253,14 @@ function OnParam(class, sec)
 						return
 					end
 				end
-			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если заявка не обновила base_price сработает эта защита
+
+			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если 	заявка не обновила base_price сработает эта защита
 				if math.abs(current_price - base_price) > (order_interval * 1.6) and not ban_new_ord then
 					PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
 					base_price = NewBasePrice(base_price, current_price)
 					OrdersVerification(base_price)
 				end
+
 			-- используем ячейку base_price
 	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
 					(current_price < base_price and current_price > base_price - order_interval) then
