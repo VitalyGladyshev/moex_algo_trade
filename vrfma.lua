@@ -13,6 +13,7 @@
 12 V ƒва счЄта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 V «а п€ть дней до нового мес€ца переходить на новую бумагу продолжа€ реализовывать старые. ƒл€ этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
+14 info Ќа границе сессии бывает удовлетворение по цене не указанной в за€вке
 ]]
 function OnInit()	-- событие - инициализаци€ QUIK
 	file_log = io.open(getScriptPath() .. "\\vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
@@ -609,7 +610,7 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 											client = tab["client"],
 											instr_name = tab["instr_name"],
 											instr_class = tab["instr_class"] })
-			base_price = tab["price"]
+			base_price = tab["price"]	-- !!! »менно так, а не trade.price. Ќа границе сессии бывает удовлетворение по цене не указанной в за€вке!!!
 			if tostring(tab["twin"]) == "0" then
 				tab["status"] = "3"
 				if tab["operation"] == 'B' then
