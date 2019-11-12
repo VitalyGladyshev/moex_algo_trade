@@ -2,15 +2,15 @@
 1 V Перенести записи в лог файл из обработчиков в main
 2 V После отладки уменьшить вывод отладочных сообщений
 3 V Сделать снятие заявок в полночь и запуск торговли после 10:01
-4 Продумать обработку при quantity больше единицы
+4 _Продумать обработку при quantity больше единицы
 5 Исправить проверку на некорректное значение текущей цены в OnParam
-6 Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
+6 _Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 7 ! Не сошлось количество записей о бумагах с остатком !
 8 При восстановлении twin'ов сделать проверку на текущую цену
 9 Появлялись в таблице заявки со статусом 1
-10 Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
+10 info Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
 11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
-12 Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
+12 V Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 ]]
@@ -54,6 +54,12 @@ function OnInit()	-- событие - инициализация QUIK
 		below_border = file_ini:read("*l")
 		PrintDbgStr("vrfma: Чтение vrfma.ini. Нижняя граница рабочего диапазона: " .. below_border)
 		file_log:write(os.date() .. " Чтение vrfma.ini. Нижняя граница рабочего диапазона: " .. below_border .. " \n")
+		account_alt = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Номер альтернативного счёта: " .. account_alt)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Номер альтернативного счёта: " .. account_alt .. " \n")
+		client_alt = file_ini:read("*l")
+		PrintDbgStr("vrfma: Чтение vrfma.ini. Альтернативный код клиента: " .. client_alt)
+		file_log:write(os.date() .. " Чтение vrfma.ini. Альтернативный код клиента: " .. client_alt .. " \n")
 		file_ini:close()
 		order_interval = tonumber(order_interval)
 		profit = tonumber(profit)
@@ -78,6 +84,11 @@ function OnInit()	-- событие - инициализация QUIK
 	else
 		auto_border_check = true
 	end
+	alt_client_use = false
+	if client ~= client_alt then
+		alt_client_use = true
+	end
+	prev_client_main = false
 	file_name_for_load = getScriptPath() .. "\\trades_tbl.dat"
 	trade_period = false
 	CheckTradePeriod()
@@ -480,8 +491,18 @@ function OnStop(flag)	-- событие - остановка скрипта
 end
 
 function SendTransBuySell(price, quant, operation, account_in, client_in, instr_name_in, instr_class_in, twin_num)	-- Отправка заявки на покупку/продажу
+	if alt_client_use and client_in == nil then
+		if prev_client_main then -- PrintDbgStr(string.format("vrfma: client_in %s", tostring(client_in)))	
+			client_in = client_alt
+			prev_client_main = false
+		else
+			client_in = client
+			prev_client_main = true
+		end
+	else
+		client_in = client_in or client
+	end
 	account_in = account_in or account
-	client_in = client_in or client
 	instr_name_in = instr_name_in or instr_name
 	instr_class_in = instr_class_in or instr_class
 	twin_num = twin_num or "0"
@@ -592,9 +613,9 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 			if tostring(tab["twin"]) == "0" then
 				tab["status"] = "3"
 				if tab["operation"] == 'B' then
-					SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"])
+					SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"])
 				else
-					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"])
+					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
 for ind_n, tab_n in pairs(trades_tbl) do
@@ -666,9 +687,9 @@ function OrdersVerification(b_price)
 			if not istwin then
 				PrintDbgStr(string.format("vrfma: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", tostring(tab["number_sys"])))
 				if tab["operation"] == 'B' then
-					SendTransBuySell(b_price + profit, quantity, 'S', tab["number_sys"])
+					SendTransBuySell(b_price + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"])
 				else
-					SendTransBuySell(b_price - profit, quantity, 'B', tab["number_sys"])
+					SendTransBuySell(b_price - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
 				end
 			end
 		end
