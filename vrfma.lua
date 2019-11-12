@@ -490,7 +490,7 @@ function OnStop(flag)	-- событие - остановка скрипта
 	return 0
 end
 
-function SendTransBuySell(price, quant, operation, account_in, client_in, instr_name_in, instr_class_in, twin_num)	-- Отправка заявки на покупку/продажу
+function SendTransBuySell(price, quant, operation, twin_num, account_in, client_in, instr_name_in, instr_class_in)	-- Отправка заявки на покупку/продажу
 	if alt_client_use and client_in == nil then
 		if prev_client_main then -- PrintDbgStr(string.format("vrfma: client_in %s", tostring(client_in)))	
 			client_in = client_alt
