@@ -634,7 +634,7 @@ for ind_n, tab_n in pairs(trades_tbl) do
 end
 				for ind_2, tab_2 in pairs(trades_tbl) do
 					if tostring(tab["twin"]) == tostring(tab_2["number_sys"]) then
-						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", tostring(tab_n["number_sys"]), tostring(tab["number_sys"]), tostring(tab["twin"]), tostring(tab_2["number_sys"])))
+						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", tostring(tab["number_sys"]), tostring(tab["twin"]), tostring(tab_2["number_sys"])))
 						trades_tbl[ind_2] = nil
 						break
 					end
