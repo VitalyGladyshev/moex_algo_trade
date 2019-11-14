@@ -310,47 +310,51 @@ function WarmStart(b_price, c_price)
 	file_log:write(string.format("%s WarmStart\n", os.date()))
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
-			if tonumber(c_price) > tonumber(tab["price"]) + profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+			if tab["instr_name"] == instr_name and tonumber(c_price) > tonumber(tab["price"]) + profit then
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s", 
 									tostring(c_price), 
 									tostring(tab["price"] + profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
 									tostring(tab["client"]),
-									tostring(tab["instr_name"]),
-									tostring(tab["instr_class"])))
+									tab["instr_name"],
+									tostring(tab["instr_class"]),
+									instr_name))
 				SendTransBuySell(c_price, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s", 
 									tostring(c_price), 
 									tostring(tab["price"] + profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
 									tostring(tab["client"]),
-									tostring(tab["instr_name"]),
-									tostring(tab["instr_class"])))
+									tab["instr_name"],
+									tostring(tab["instr_class"]),
+									instr_name))
 				SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			end
 		else
-			if tonumber(c_price) < tonumber(tab["price"]) - profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+			if tab["instr_name"] == instr_name and tonumber(c_price) < tonumber(tab["price"]) - profit then
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s", 
 									tostring(c_price), 
 									tostring(tab["price"] - profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
 									tostring(tab["client"]),
-									tostring(tab["instr_name"]),
-									tostring(tab["instr_class"])))
+									tab["instr_name"],
+									tostring(tab["instr_class"]),
+									instr_name))
 				SendTransBuySell(c_price, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			else
-				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s", 
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s", 
 									tostring(c_price), 
 									tostring(tab["price"] - profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
 									tostring(tab["client"]),
-									tostring(tab["instr_name"]),
-									tostring(tab["instr_class"])))
+									tab["instr_name"],
+									tostring(tab["instr_class"]),
+									instr_name))
 				SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"])
 			end
 		end
