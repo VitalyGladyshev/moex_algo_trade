@@ -9,10 +9,11 @@
 8 При восстановлении twin'ов сделать проверку на текущую цену
 9 Появлялись в таблице заявки со статусом 1
 10 info Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
-11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
-12 V Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
+11 v Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
+12 v Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
-	бумаги и класс в таблицу и соответственно в trades_tbl.dat
+	бумаги и класс в таблицу и соответственно в trades_tbl.dat	
+	!!! Возможно нужно писать в файл ещё и profit !!!
 14 info На границе сессии бывает удовлетворение по цене не указанной в заявке
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 ]]
@@ -68,6 +69,7 @@ function OnInit()	-- событие - инициализация QUIK
 		quantity = tonumber(quantity)
 		above_border = tonumber(above_border)
 		below_border = tonumber(below_border)
+		prev_instr_name = nil
 	else
 		load_error = true
 		message("vrfma: Ошибка загрузки vrfma.ini")
@@ -114,6 +116,11 @@ function OnInit()	-- событие - инициализация QUIK
 	if not cold_start then
 		dofile(file_name_for_load)
 	end
+	if not cold_start and trades_tbl[1]["instr_name"] ~= instr_name then
+		prev_instr_name = trades_tbl[1]["instr_name"]
+		PrintDbgStr(string.format("vrfma: Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s", instr_name, prev_instr_name))
+		file_log:write(string.format("%s Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
+	end
 	
 	free_TRANS_ID = os.time()	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
 	QUEUE_SENDTRANSBUYSELL = {}
@@ -123,6 +130,9 @@ function OnInit()	-- событие - инициализация QUIK
 	current_price = 0
 	base_price = 0
 	KillAllOrders(instr_class, instr_name, client)
+	if prev_instr_name ~= nil then
+		KillAllOrders(instr_class, prev_instr_name, client)
+	end
 	
 	local request_result_depo_buy = ParamRequest(instr_class, instr_name, "LAST")
 	if request_result_depo_buy then
@@ -149,6 +159,9 @@ function CheckTradePeriod()
 		if trade_period then
 			trade_period = false
 			KillAllOrders(instr_class, instr_name, client)
+			if prev_instr_name ~= nil then
+				KillAllOrders(instr_class, prev_instr_name, client)
+			end
 			PrintDbgStr(string.format("vrfma: Неторговое время FORTS на ММВБ снимаем заявки. Время: %s", tostring(os.date())))
 			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.")
 		end
@@ -158,12 +171,18 @@ function CheckTradePeriod()
 		PrintDbgStr(string.format("vrfma: Снятие заявок перед торговой сессией. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок перед торговой сессией.")
 		KillAllOrders(instr_class, instr_name, client)
+		if prev_instr_name ~= nil then
+			KillAllOrders(instr_class, prev_instr_name, client)
+		end
 	end
 	if now_dt.hour == 23 and now_dt.min > 49 and t2350ko then
 		t2350ko = false
 		PrintDbgStr(string.format("vrfma: Снятие заявок после торговой сессии. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок после торговой сессии.")
 		KillAllOrders(instr_class, instr_name, client)
+		if prev_instr_name ~= nil then
+			KillAllOrders(instr_class, prev_instr_name, client)
+		end
 	end
 end
 
@@ -256,9 +275,15 @@ function OnParam(class, sec)
 						end
 						return
 					else
-						base_price = NewBasePrice(tonumber(trades_tbl[1]["price"]), current_price)	--trades_tbl толькочто запонена т.е. первый элемент должен быть
-						PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
-						file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
+						if prev_instr_name == instr_name then
+							base_price = NewBasePrice(tonumber(trades_tbl[1]["price"]), current_price)	--trades_tbl толькочто запонена т.е. первый элемент должен быть
+							PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
+							file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
+						else
+							base_price = current_price
+							PrintDbgStr(string.format("vrfma: Новый инструмент base_price = current_price: %.2f", base_price))
+							file_log:write(string.format("%s Новый инструмент base_price = current_price: %.2f\n", os.date(), base_price))
+						end
 						WarmStart(base_price, current_price)
 						return
 					end
@@ -479,6 +504,9 @@ function ExitMess()
 									tostring(tab["instr_class"])))
 	end	
 	KillAllOrders(instr_class, instr_name, client)
+	if prev_instr_name ~= nil then
+		KillAllOrders(instr_class, prev_instr_name, client)
+	end
 	PrintDbgStr("vrfma: vrfma завершён")
 	file_log:write(os.date() .. " vrfma завершён\n")
 	file_log:close()
