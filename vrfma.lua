@@ -14,6 +14,7 @@
 13 V «а п€ть дней до нового мес€ца переходить на новую бумагу продолжа€ реализовывать старые. ƒл€ этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 14 info Ќа границе сессии бывает удовлетворение по цене не указанной в за€вке
+15 info ¬ 9.50 “ики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 ]]
 function OnInit()	-- событие - инициализаци€ QUIK
 	file_log = io.open(getScriptPath() .. "\\vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
@@ -211,7 +212,7 @@ function OnParam(class, sec)
 	if class == instr_class and sec == instr_name then
 		res = getParamEx(class, sec, "LAST")
 		if res ~= 0 then
-			PrintDbgStr(string.format("vrfma: %s: %.2f", instr_name, res.param_value))
+			PrintDbgStr(string.format("vrfma: %s %s: %.2f", os.date(), instr_name, res.param_value))
 			file_log:write(string.format("%s %s: %.2f\n", os.date(), instr_name, res.param_value))
 			if tostring(current_price) == tostring(res.param_value) then
 				return
