@@ -268,6 +268,8 @@ function OnParam(class, sec)
 			-- инициализация при старте
 				if start_deploying then
 					start_deploying = false
+				-- здесь сделать обработку гэпа
+				
 					if cold_start then
 						base_price = res.param_value
 						if not ban_new_ord then
@@ -524,7 +526,7 @@ function OnStop(flag)	-- событие - остановка скрипта
 	return 0
 end
 
-function SendTransBuySell(price, quant, operation, twin_num, account_in, client_in, instr_name_in, instr_class_in)	-- Отправка заявки на покупку/продажу
+function SendTransBuySell(price, quant, operation, twin_num, account_in, client_in, instr_name_in, instr_class_in, profit_in, write_to_table)	-- Отправка заявки на покупку/продажу
 	if alt_client_use and client_in == nil then
 		if prev_client_main then -- PrintDbgStr(string.format("vrfma: client_in %s", tostring(client_in)))	
 			client_in = client_alt
@@ -540,6 +542,8 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 	instr_name_in = instr_name_in or instr_name
 	instr_class_in = instr_class_in or instr_class
 	twin_num = twin_num or "0"
+	profit_in = profit_in or profit
+	write_to_table = write_to_table or true
 	
 	local transaction = {}
 	transaction['TRANS_ID'] = tostring(free_TRANS_ID)
@@ -558,26 +562,28 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 		PrintDbgStr(string.format("vrfma: Транзакция %s не прошла проверку на стороне терминала QUIK [%s]", transaction.TRANS_ID, result))
 		file_log:write(string.format("%s Транзакция %s не прошла проверку на стороне терминала QUIK [%s]\n", os.date(), transaction.TRANS_ID, result))
 	else
-		table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
-									["number_sys"] = 0, 
-									["price"] = price, 
-									["operation"] = operation, 
-									["status"] = "1", 
-									["twin"] = twin_num,
-									["quantity_current"] = quant,
-									["account"] = account_in,
-									["client"] = client_in,
-									["instr_name"] = instr_name_in,
-									["instr_class"] = instr_class_in}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
-		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
-												price = price,
-												operation = operation,
-												quantity = quant,
-												twin = twin_num,
-												account = account_in,
-												client = client_in,
-												instr_name = instr_name_in,
-												instr_class = instr_class_in })
+		if write_to_table then
+			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+										["number_sys"] = 0, 
+										["price"] = price, 
+										["operation"] = operation, 
+										["status"] = "1", 
+										["twin"] = twin_num,
+										["quantity_current"] = quant,
+										["account"] = account_in,
+										["client"] = client_in,
+										["instr_name"] = instr_name_in,
+										["instr_class"] = instr_class_in}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
+			table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
+													price = price,
+													operation = operation,
+													quantity = quant,
+													twin = twin_num,
+													account = account_in,
+													client = client_in,
+													instr_name = instr_name_in,
+													instr_class = instr_class_in })
+		end
 	end
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
