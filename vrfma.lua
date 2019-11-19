@@ -15,9 +15,11 @@
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 14 info На границе сессии бывает удовлетворение по цене не указанной в заявке
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
+
+!!! Установлены тестовые пороги возвращения в рабочий диапазон !!!
 ]]
 function OnInit()	-- событие - инициализация QUIK
-	file_log = io.open(getScriptPath() .. "\\vrfma_" .. os.date("%Y%m%d_%H%M%S") .. ".log", "w")
+	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
 	PrintDbgStr("vrfma: Событие - инициализация QUIK")
 	file_log:write(os.date() .. " vrfma запущен (инициализация)\n")
 	load_error = false
@@ -69,6 +71,7 @@ function OnInit()	-- событие - инициализация QUIK
 		above_border = tonumber(above_border)
 		below_border = tonumber(below_border)
 		prev_instr_name = nil
+		prev_instr_class = nil
 	else
 		load_error = true
 		message("vrfma: Ошибка загрузки vrfma.ini")
@@ -117,6 +120,7 @@ function OnInit()	-- событие - инициализация QUIK
 	end
 	if not cold_start and trades_tbl[1]["instr_name"] ~= instr_name then
 		prev_instr_name = trades_tbl[1]["instr_name"]
+		prev_instr_class = trades_tbl[1]["instr_class"]
 		PrintDbgStr(string.format("vrfma: Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s", instr_name, prev_instr_name))
 		file_log:write(string.format("%s Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
 	end
@@ -128,11 +132,9 @@ function OnInit()	-- событие - инициализация QUIK
 	QUEUE_ONTRADE = {}
 	current_price = 0
 	base_price = 0
-	KillAllOrders(instr_class, instr_name, client)
-	if prev_instr_name ~= nil then
-		KillAllOrders(instr_class, prev_instr_name, client)
-	end
-	
+
+	KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
+
 	local request_result_depo_buy = ParamRequest(instr_class, instr_name, "LAST")
 	if request_result_depo_buy then
 		PrintDbgStr("vrfma: По инструменту " .. instr_name .. " успешно заказан параметр LAST")
@@ -157,10 +159,7 @@ function CheckTradePeriod()
 	else		
 		if trade_period then
 			trade_period = false
-			KillAllOrders(instr_class, instr_name, client)
-			if prev_instr_name ~= nil then
-				KillAllOrders(instr_class, prev_instr_name, client)
-			end
+			KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 			PrintDbgStr(string.format("vrfma: Неторговое время FORTS на ММВБ снимаем заявки. Время: %s", tostring(os.date())))
 			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.")
 		end
@@ -169,18 +168,25 @@ function CheckTradePeriod()
 		t0950ko = false
 		PrintDbgStr(string.format("vrfma: Снятие заявок перед торговой сессией. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок перед торговой сессией.")
-		KillAllOrders(instr_class, instr_name, client)
-		if prev_instr_name ~= nil then
-			KillAllOrders(instr_class, prev_instr_name, client)
-		end
+		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 	end
 	if now_dt.hour == 23 and now_dt.min > 49 and t2350ko then
 		t2350ko = false
 		PrintDbgStr(string.format("vrfma: Снятие заявок после торговой сессии. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок после торговой сессии.")
-		KillAllOrders(instr_class, instr_name, client)
-		if prev_instr_name ~= nil then
-			KillAllOrders(instr_class, prev_instr_name, client)
+		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
+	end
+end
+
+function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr_class_in, instr_name_in, prev_instr_name_in, prev_instr_class_in)
+	KillAllOrders(instr_class_in, instr_name_in, client_in)
+	if prev_instr_name_in ~= nil then
+		KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_in)
+	end
+	if alt_client_use_in then
+		KillAllOrders(instr_class_in, instr_name_in, client_alt_in)
+		if prev_instr_name_in ~= nil then
+			KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_alt_in)
 		end
 	end
 end
@@ -244,7 +250,8 @@ function OnParam(class, sec)
 			if trade_period then
 				if auto_border_check then
 				-- проверяем на соответствие границам рабочего диапазона
-					if ban_new_ord and current_price < (above_border * 0.988) and current_price > (below_border * 1.015) then		-- 0.998) and current_price > (below_border * 1.003) then
+-- !!!
+					if ban_new_ord and current_price < (above_border * 0.998) and current_price > (below_border * 1.003) then	-- 0.988) and current_price > (below_border * 1.015) then
 						ban_new_ord = false
 						PrintDbgStr(string.format("vrfma: Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f", current_price, base_price))
 						file_log:write(string.format("%s Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f\n", os.date(), current_price, base_price))
@@ -515,10 +522,7 @@ function ExitMess()
 									tostring(tab["instr_class"]),
 									tostring(tab["profit"])))
 	end	
-	KillAllOrders(instr_class, instr_name, client)
-	if prev_instr_name ~= nil then
-		KillAllOrders(instr_class, prev_instr_name, client)
-	end
+	KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 	PrintDbgStr("vrfma: vrfma завершён")
 	file_log:write(os.date() .. " vrfma завершён\n")
 	file_log:close()
