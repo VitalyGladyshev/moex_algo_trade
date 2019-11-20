@@ -16,7 +16,7 @@
 14 info На границе сессии бывает удовлетворение по цене не указанной в заявке
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 
-!!! Установлены тестовые пороги возвращения в рабочий диапазон !!!
+!!! Дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог!!!
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
@@ -250,8 +250,7 @@ function OnParam(class, sec)
 			if trade_period then
 				if auto_border_check then
 				-- проверяем на соответствие границам рабочего диапазона
--- !!!
-					if ban_new_ord and current_price < (above_border * 0.998) and current_price > (below_border * 1.003) then	-- 0.988) and current_price > (below_border * 1.015) then
+					if ban_new_ord and current_price < (above_border * 0.988) and current_price > (below_border * 1.015) then	-- 0.998) and current_price > (below_border * 1.003) then
 						ban_new_ord = false
 						PrintDbgStr(string.format("vrfma: Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f", current_price, base_price))
 						file_log:write(string.format("%s Вернулись в рабочий диапазон current_price: %.2f base_price: %.2f\n", os.date(), current_price, base_price))
