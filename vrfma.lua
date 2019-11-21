@@ -88,7 +88,11 @@ function OnInit()	-- событие - инициализация QUIK
 	if tostring(auto_border_check) == "false" then
 		auto_border_check = false
 	else
-		auto_border_check = true
+		if ban_new_ord then
+			auto_border_check = false
+		else
+			auto_border_check = true
+		end
 	end
 	alt_client_use = false
 	if client ~= client_alt then
