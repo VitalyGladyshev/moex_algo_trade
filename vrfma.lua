@@ -285,7 +285,7 @@ function OnParam(class, sec)
 						end
 						return
 					else
-						if prev_instr_name == instr_name then
+						if prev_instr_name == nil then
 							base_price = NewBasePrice(tonumber(trades_tbl[1]["price"]), current_price)	--trades_tbl толькочто запонена т.е. первый элемент должен быть
 							PrintDbgStr(string.format("vrfma: Определение base_price: %.2f", base_price))
 							file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
