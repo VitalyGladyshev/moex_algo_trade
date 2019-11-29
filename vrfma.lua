@@ -16,6 +16,8 @@
 14 info На границе сессии бывает удовлетворение по цене не указанной в заявке (в конце сессии аукцион закрытия)
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
+17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
+18 Сделать обработку клирингаю Текущий алгоритм его не купирует. Заявки удаляются системой, но остаются в таблице программы
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
@@ -670,13 +672,18 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 											instr_name = tab["instr_name"],
 											instr_class = tab["instr_class"],
 											profit = tab["profit"] })
-			base_price = tab["price"]	-- !!! Именно так, а не trade.price. На границе сессии бывает удовлетворение по цене не указанной в заявке!!!
 			if tostring(tab["twin"]) == "0" then
+			-- У twin при стартовой расствновке может быть цена не из сетки. Изменять base_price надо если не twin
+				base_price = tab["price"]	-- !!! Именно так, а не trade.price. На границе сессии бывает удовлетворение по цене не указанной в заявке!!!
 				tab["status"] = "3"
 				if tab["operation"] == 'B' then
 					SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"])
 				else
 					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
+				end
+			-- Проверка производится только если не twin
+				if not ban_new_ord then
+					OrdersVerification(base_price)
 				end
 			else	--сработал twin. Удаляем заявку и twin
 --[[for ind_n, tab_n in pairs(trades_tbl) do
@@ -717,9 +724,6 @@ end ]]
 										tostring(tab_n["instr_class"]),
 										tostring(tab_n["profit"])))
 end ]]
-			end
-			if not ban_new_ord then
-				OrdersVerification(base_price)
 			end
 			break
 		end
