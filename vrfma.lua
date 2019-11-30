@@ -107,6 +107,8 @@ function OnInit()	-- событие - инициализация QUIK
 	cold_start = true
 	t0950ko = true
 	t2350ko = true
+	timer_done = false
+	timer_start = false
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
 		PrintDbgStr(string.format("vrfma: Загрузка записей из trades_tbl.dat"))
@@ -152,8 +154,8 @@ function OnInit()	-- событие - инициализация QUIK
 end
 
 function CheckTradePeriod()
-	now_dt = os.date("*t", os.time())	-- PrintDbgStr(string.format("vrfma: CheckTradePeriod Время - час: %i минута: %i", now_dt.hour, now_dt.min))
-	if (now_dt.hour > 10 and now_dt.hour < 23) or (now_dt.hour == 10 and now_dt.min > 0) or (now_dt.hour == 23 and now_dt.min < 50) then
+	local now_dt = os.date("*t", os.time())	-- PrintDbgStr(string.format("vrfma: CheckTradePeriod Время - час: %i минута: %i", now_dt.hour, now_dt.min))
+	if (tonumber(now_dt.hour) > 10 and tonumber(now_dt.hour) < 23) or (tonumber(now_dt.hour) == 10 and tonumber(now_dt.min) > 0) or (tonumber(now_dt.hour) == 23 and tonumber(now_dt.min) < 50) then
 		t0950ko = true
 		t2350ko = true
 		if not trade_period then
@@ -169,13 +171,13 @@ function CheckTradePeriod()
 			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.")
 		end
 	end
-	if now_dt.hour == 9 and now_dt.min > 49 and t0950ko then
+	if tonumber(now_dt.hour) == 9 and tonumber(now_dt.min) > 49 and t0950ko then
 		t0950ko = false
 		PrintDbgStr(string.format("vrfma: Снятие заявок перед торговой сессией. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок перед торговой сессией.")
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 	end
-	if now_dt.hour == 23 and now_dt.min > 49 and t2350ko then
+	if tonumber(now_dt.hour) == 23 and tonumber(now_dt.min) > 49 and t2350ko then
 		t2350ko = false
 		PrintDbgStr(string.format("vrfma: Снятие заявок после торговой сессии. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " Снятие заявок после торговой сессии.")
@@ -303,9 +305,14 @@ function OnParam(class, sec)
 
 			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если 	заявка не обновила base_price сработает эта защита
 				if math.abs(current_price - base_price) > (order_interval * 1.6) and not ban_new_ord then
-					PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
-					base_price = NewBasePrice(base_price, current_price)
-					OrdersVerification(base_price)
+					if timer_done then
+						timer_done = false
+						PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
+						base_price = NewBasePrice(base_price, current_price)
+						OrdersVerification(base_price)
+					else
+						timer_start = true
+					end
 				end
 
 			-- используем ячейку base_price
@@ -899,7 +906,13 @@ function main()
 			table.sremove(QUEUE_ONTRADE, 1)
 		end
 		CheckTradePeriod()
-		sleep(10)
+		if timer_start then
+			timer_start = false
+			sleep(2000)
+			timer_done = true
+		else
+			sleep(10)
+		end
 	end
 	ExitMess()
 end
