@@ -4,20 +4,20 @@
 3 V Сделать снятие заявок в полночь и запуск торговли после 10:01
 4 _Продумать обработку при quantity больше единицы
 5 Исправить проверку на некорректное значение текущей цены в OnParam
-6 _Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
+6 v Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 7 ! Не сошлось количество записей о бумагах с остатком !
 8 При восстановлении twin'ов сделать проверку на текущую цену
-9 Появлялись в таблице заявки со статусом 1
+9 info Появлялись в таблице заявки со статусом 1
 10 info Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
-11 v Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
-12 v Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
+11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
+12 V Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 14 info На границе сессии бывает удовлетворение по цене не указанной в заявке (в конце сессии аукцион закрытия)
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
 17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
-18 Сделать обработку клирингаю Текущий алгоритм его не купирует. Заявки удаляются системой, но остаются в таблице программы
+18 Сделать обработку клиринга. Текущий алгоритм его не купирует. Заявки удаляются системой, но остаются в таблице программы
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
@@ -109,6 +109,9 @@ function OnInit()	-- событие - инициализация QUIK
 	t2350ko = true
 	timer_done = false
 	timer_start = false
+-- min_precision менять руками!!!!!
+	min_precision = 0.01
+	clearing_test_count = 6000
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
 		PrintDbgStr(string.format("vrfma: Загрузка записей из trades_tbl.dat"))
@@ -233,6 +236,23 @@ function KillAllOrders(classCode, secCode, brokerref)	-- Нашёл на форуме QUIK и 
 	return errNotExist 
 end
 
+function ClearingTest()
+	PrintDbgStr(string.format("vrfma: Проверка на клиринг"))
+	file_log:write(string.format("%s Проверка на клиринг\n", os.date()))
+	--[[function myFindClearing(C,S,F, BR)
+		return (C == classCode) and (S == secCode) and (bit.band(F, 0x1) ~= 0) and (BR == brokerref)
+	end
+
+	for _, tab in pairs(trades_tbl) do
+		if tostring(tab["status"]) == "2" then	
+			number_sys_forsearch = tbl["number_sys"]
+
+			break
+		end
+	end]]
+	
+end
+
 function NewBasePrice(test_price, curr_price)
 	local delta = curr_price - test_price	--local delta = test_price - curr_price
 	whole_part, fractional_part = math.modf(delta/order_interval)
@@ -280,8 +300,6 @@ function OnParam(class, sec)
 			-- инициализация при старте
 				if start_deploying then
 					start_deploying = false
-				-- здесь сделать обработку гэпа
-				
 					if cold_start then
 						base_price = res.param_value
 						if not ban_new_ord then
@@ -302,11 +320,9 @@ function OnParam(class, sec)
 						return
 					end
 				end
-
 			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если 	заявка не обновила base_price сработает эта защита
 				if math.abs(current_price - base_price) > (order_interval * 1.6) and not ban_new_ord then
 					if timer_done then
-						timer_done = false
 						PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
 						base_price = NewBasePrice(base_price, current_price)
 						OrdersVerification(base_price)
@@ -314,7 +330,7 @@ function OnParam(class, sec)
 						timer_start = true
 					end
 				end
-
+				timer_done = false
 			-- используем ячейку base_price
 	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
 					(current_price < base_price and current_price > base_price - order_interval) then
@@ -353,11 +369,12 @@ end
 function WarmStart(b_price, c_price)
 	PrintDbgStr(string.format("vrfma: WarmStart"))
 	file_log:write(string.format("%s WarmStart\n", os.date()))
+	GapFilling(c_price)
 	for _, tab in pairs(start_trades_tbl) do		--ставим twin-ов
 		if tab["operation"] == 'B' then
 			if tab["instr_name"] == instr_name and tonumber(c_price) > tonumber(tab["price"]) + profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
-									tostring(c_price), 
+				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price(min_precision)+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
+									tostring(c_price + tonumber(min_precision)), 
 									tostring(tab["price"] + profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
@@ -366,7 +383,7 @@ function WarmStart(b_price, c_price)
 									tostring(tab["instr_class"]),
 									instr_name,
 									tostring(tab["profit"])))
-				SendTransBuySell(c_price, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
+				SendTransBuySell(c_price + tonumber(min_precision), quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
 									tostring(c_price), 
@@ -382,8 +399,8 @@ function WarmStart(b_price, c_price)
 			end
 		else
 			if tab["instr_name"] == instr_name and tonumber(c_price) < tonumber(tab["price"]) - profit then
-				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
-									tostring(c_price), 
+				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price(min_precision)+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
+									tostring(c_price - tonumber(min_precision)), 
 									tostring(tab["price"] - profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
@@ -392,7 +409,7 @@ function WarmStart(b_price, c_price)
 									tostring(tab["instr_class"]),
 									instr_name,
 									tostring(tab["profit"])))
-				SendTransBuySell(c_price, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
+				SendTransBuySell(c_price - tonumber(min_precision), quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
 									tostring(c_price), 
@@ -411,6 +428,155 @@ function WarmStart(b_price, c_price)
 	end
 	if not ban_new_ord then
 		OrdersVerification(b_price)
+	end
+end
+
+function GapFilling(c_price_in)
+	s_greater = 0
+	b_minor = 1000000
+	for _, tab in pairs(start_trades_tbl) do
+		if tab["operation"] == 'S' then
+			if tab["instr_name"] == instr_name and tonumber(tab["price"]) > s_greater then
+				s_greater = tonumber(tab["price"])
+				s_account = tonumber(tab["account"])
+				s_client = tonumber(tab["client"])
+			end
+		else
+			if tab["instr_name"] == instr_name and tonumber(tab["price"]) < b_minor then
+				b_minor = tonumber(tab["price"])
+				b_account = tonumber(tab["account"])
+				b_client = tonumber(tab["client"])
+			end
+		end
+	end
+-- ищем и обрабатываем гэп
+	if tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
+		hole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
+		PrintDbgStr(string.format("vrfma: Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано: %s бумаг", 
+									tostring(c_price_in), 
+									tostring(s_greater), 
+									tostring(hole_part)))
+		file_log:write(string.format("%s Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано: %s бумаг\n", 
+									os.date(),
+									tostring(c_price_in), 
+									tostring(s_greater), 
+									tostring(hole_part)))
+		if tonumber(hole_part) > 12 then
+			hole_part = 12
+			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. hole_part: %s ограничиваем до 12", tostring(hole_part)))
+			file_log:write(string.format("%s Ограничение гэпа. S. hole_part: %s ограничиваем до 12\n", os.date()))
+		end
+		SendTransBuySell(c_price_in + tonumber(min_precision), hole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		for cnt = 1, hole_part do
+			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+										["number_sys"] = 0, 
+										["price"] = tonumber(s_greater) + order_interval * cnt, 
+										["operation"] = 'S', 
+										["status"] = "3", 
+										["twin"] = "0",
+										["quantity_current"] = quantity,
+										["account"] = s_account,
+										["client"] = s_client,
+										["instr_name"] = instr_name,
+										["instr_class"] = instr_class,
+										["profit"] = profit})
+			table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
+												["number_sys"] = 0, 
+												["price"] = tonumber(s_greater) + order_interval * cnt, 
+												["operation"] = 'S', 
+												["status"] = "3", 
+												["twin"] = "0",
+												["quantity_current"] = quantity,
+												["account"] = s_account,
+												["client"] = s_client,
+												["instr_name"] = instr_name,
+												["instr_class"] = instr_class,
+												["profit"] = profit})
+			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %i операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+											tostring(free_TRANS_ID),
+											tonumber(s_greater) + order_interval * cnt,
+											tostring(quantity),
+											tostring(s_account),
+											tostring(s_client),
+											tostring(instr_name),
+											tostring(instr_class),
+											tostring(profit)))
+			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+											os.date(), 
+											tostring(free_TRANS_ID),
+											tonumber(s_greater) + order_interval * cnt,
+											tostring(quantity),
+											tostring(s_account),
+											tostring(s_client),
+											tostring(instr_name),
+											tostring(instr_class),
+											tostring(profit)))
+			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+		end
+	end
+	if tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
+		hole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
+		PrintDbgStr(string.format("vrfma: Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено: %s бумаг", 
+									tostring(c_price_in), 
+									tostring(b_minor), 
+									tostring(hole_part)))
+		file_log:write(string.format("%s Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено: %s бумаг\n", 
+									os.date(),
+									tostring(c_price_in), 
+									tostring(b_minor), 
+									tostring(hole_part)))
+		if tonumber(hole_part) > 12 then
+			hole_part = 12
+			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. hole_part: %s ограничиваем до 12", tostring(hole_part)))
+			file_log:write(string.format("%s Ограничение гэпа. B. hole_part: %s ограничиваем до 12\n", os.date()))
+		end
+		SendTransBuySell(c_price_in - tonumber(min_precision), hole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		for cnt = 1, hole_part do
+			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+										["number_sys"] = 0, 
+										["price"] = tonumber(b_minor) - order_interval * cnt, 
+										["operation"] = 'B', 
+										["status"] = "3", 
+										["twin"] = "0",
+										["quantity_current"] = quantity,
+										["account"] = s_account,
+										["client"] = s_client,
+										["instr_name"] = instr_name,
+										["instr_class"] = instr_class,
+										["profit"] = profit})
+			table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
+												["number_sys"] = 0, 
+												["price"] = tonumber(b_minor) - order_interval * cnt, 
+												["operation"] = 'B', 
+												["status"] = "3", 
+												["twin"] = "0",
+												["quantity_current"] = quantity,
+												["account"] = s_account,
+												["client"] = s_client,
+												["instr_name"] = instr_name,
+												["instr_class"] = instr_class,
+												["profit"] = profit})
+			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+											tostring(free_TRANS_ID),
+											tonumber(b_minor) - order_interval * cnt,
+											tostring(quantity),
+											tostring(s_account),
+											tostring(s_client),
+											tostring(instr_name),
+											tostring(instr_class),
+											tostring(profit)))
+			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+											os.date(), 
+											tostring(free_TRANS_ID),
+											tonumber(b_minor) - order_interval * cnt,
+											tostring(quantity),
+											tostring(s_account),
+											tostring(s_client),
+											tostring(instr_name),
+											tostring(instr_class),
+											tostring(profit)))
+			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+		end
 	end
 end
 
@@ -600,7 +766,6 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 										["instr_name"] = instr_name_in,
 										["instr_class"] = instr_class_in,
 										["profit"] = profit_in}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
-
 		end
 		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
 												price = price,
@@ -906,12 +1071,18 @@ function main()
 			table.sremove(QUEUE_ONTRADE, 1)
 		end
 		CheckTradePeriod()
+		if tonumber(clearing_test_count) <= 0 then
+			clearing_test_count = 6000
+			ClearingTest()
+		else
+			clearing_test_count = clearing_test_count - 1
+		end
 		if timer_start then
 			timer_start = false
 			sleep(2000)
 			timer_done = true
 		else
-			sleep(10)
+			sleep(50)
 		end
 	end
 	ExitMess()
