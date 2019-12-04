@@ -9,7 +9,8 @@
 8 При восстановлении twin'ов сделать проверку на текущую цену
 9 info Появлялись в таблице заявки со статусом 1
 10 info Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
-11 V Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
+11 v Возможно надо сменить подход и не ставить заявки вне диапазона, а не удалять их. 
+	 Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
 12 V Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
 13 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
@@ -17,7 +18,7 @@
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
 17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
-18 Сделать обработку клиринга. Текущий алгоритм его не купирует. Заявки удаляются системой, но остаются в таблице программы
+18 v Доделать обработку клиринга (Обнаружение есть. сделать реакцию т.е. удаление строк таблицы со статусом не 3 и WarmStart). Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
@@ -239,18 +240,42 @@ end
 function ClearingTest()
 	PrintDbgStr(string.format("vrfma: Проверка на клиринг"))
 	file_log:write(string.format("%s Проверка на клиринг\n", os.date()))
-	--[[function myFindClearing(C,S,F, BR)
-		return (C == classCode) and (S == secCode) and (bit.band(F, 0x1) ~= 0) and (BR == brokerref)
+	print_table = false
+	number_sys_forsearch = 0
+
+	function myFindClearing(ON, F)
+		return (ON == number_sys_forsearch) and (bit.band(F, 0x1) ~= 0)
 	end
 
 	for _, tab in pairs(trades_tbl) do
 		if tostring(tab["status"]) == "2" then	
-			number_sys_forsearch = tbl["number_sys"]
-
-			break
+			number_sys_forsearch = tab["number_sys"]
+			local ord = "orders"
+			local orders = SearchItems(ord, 0, getNumberOf(ord)-1, myFindClearing, "order_num,flags")
+			if (orders == nil) or (#orders == 0) then
+				PrintDbgStr(string.format("vrfma: Заявка %s из таблицы trades_tbl не найдена в системе (orders)", tostring(number_sys_forsearch)))
+				file_log:write(string.format("%s Заявка %s из таблицы trades_tbl не найдена в системе (orders)\n", os.date(), tostring(number_sys_forsearch)))			
+				print_table = true
+			end
 		end
-	end]]
-	
+	end
+	if print_table then
+		for _, tab_n in pairs(trades_tbl) do
+			PrintDbgStr(string.format("vrfma: распечатываем trades_tbl Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
+												tostring(tab_n["number_my"]), 
+												tostring(tab_n["number_sys"]), 
+												tostring(tab_n["status"]), 
+												tostring(tab_n["operation"]), 
+												tostring(tab_n["price"]), 
+												tostring(tab_n["twin"]),
+												tostring(tab_n["quantity_current"]),
+												tostring(tab_n["account"]),
+												tostring(tab_n["client"]),
+												tostring(tab_n["instr_name"]),
+												tostring(tab_n["instr_class"]),
+												tostring(tab_n["profit"])))
+		end
+	end
 end
 
 function NewBasePrice(test_price, curr_price)
@@ -449,8 +474,10 @@ function GapFilling(c_price_in)
 			end
 		end
 	end
+	PrintDbgStr(string.format("vrfma: Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s", tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
+	file_log:write(string.format("%s Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s\n", os.date(), tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 -- ищем и обрабатываем гэп
-	if tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
+	if tonumber(s_greater) ~= 0 and tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
 		hole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
 		PrintDbgStr(string.format("vrfma: Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано: %s бумаг", 
 									tostring(c_price_in), 
@@ -464,7 +491,7 @@ function GapFilling(c_price_in)
 		if tonumber(hole_part) > 12 then
 			hole_part = 12
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. hole_part: %s ограничиваем до 12", tostring(hole_part)))
-			file_log:write(string.format("%s Ограничение гэпа. S. hole_part: %s ограничиваем до 12\n", os.date()))
+			file_log:write(string.format("%s Ограничение гэпа. S. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
 		end
 		SendTransBuySell(c_price_in + tonumber(min_precision), hole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
 		for cnt = 1, hole_part do
@@ -514,7 +541,7 @@ function GapFilling(c_price_in)
 			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
 		end
 	end
-	if tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
+	if tonumber(b_minor) ~= 1000000 and tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
 		hole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
 		PrintDbgStr(string.format("vrfma: Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено: %s бумаг", 
 									tostring(c_price_in), 
@@ -528,7 +555,7 @@ function GapFilling(c_price_in)
 		if tonumber(hole_part) > 12 then
 			hole_part = 12
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. hole_part: %s ограничиваем до 12", tostring(hole_part)))
-			file_log:write(string.format("%s Ограничение гэпа. B. hole_part: %s ограничиваем до 12\n", os.date()))
+			file_log:write(string.format("%s Ограничение гэпа. B. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
 		end
 		SendTransBuySell(c_price_in - tonumber(min_precision), hole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
 		for cnt = 1, hole_part do
@@ -926,9 +953,9 @@ function OrdersVerification(b_price)
 			if not istwin then
 				PrintDbgStr(string.format("vrfma: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", tostring(tab["number_sys"])))
 				if tab["operation"] == 'B' then
-					SendTransBuySell(b_price + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"])
+					SendTransBuySell(b_price + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 				else
-					SendTransBuySell(b_price - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
+					SendTransBuySell(b_price - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 				end
 			end
 		end
