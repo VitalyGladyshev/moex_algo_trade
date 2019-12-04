@@ -18,7 +18,9 @@
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
 17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
-18 v Доделать обработку клиринга (Обнаружение есть. сделать реакцию т.е. удаление строк таблицы со статусом не 3 и WarmStart). Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
+18 v Доделать обработку клиринга. Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
+19 Ограничение на количество в секунду при расстановке twin-ов
+20 Убрал срабатывание OrdVer по twin подумать как вернуть...
 ]]
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
@@ -399,7 +401,7 @@ function WarmStart(b_price, c_price)
 		if tab["operation"] == 'B' then
 			if tab["instr_name"] == instr_name and tonumber(c_price) > tonumber(tab["price"]) + profit then
 				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price(min_precision)+: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
-									tostring(c_price + tonumber(min_precision)), 
+									tostring(c_price - tonumber(min_precision)), 
 									tostring(tab["price"] + profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
@@ -408,7 +410,7 @@ function WarmStart(b_price, c_price)
 									tostring(tab["instr_class"]),
 									instr_name,
 									tostring(tab["profit"])))
-				SendTransBuySell(c_price + tonumber(min_precision), quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
+				SendTransBuySell(c_price - tonumber(min_precision), quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. S. c_price-: %s (tab[price] + profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
 									tostring(c_price), 
@@ -425,7 +427,7 @@ function WarmStart(b_price, c_price)
 		else
 			if tab["instr_name"] == instr_name and tonumber(c_price) < tonumber(tab["price"]) - profit then
 				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price(min_precision)+: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
-									tostring(c_price - tonumber(min_precision)), 
+									tostring(c_price + tonumber(min_precision)), 
 									tostring(tab["price"] - profit), 
 									tostring(tab["status"]),
 									tostring(tab["account"]),
@@ -434,7 +436,7 @@ function WarmStart(b_price, c_price)
 									tostring(tab["instr_class"]),
 									instr_name,
 									tostring(tab["profit"])))
-				SendTransBuySell(c_price - tonumber(min_precision), quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
+				SendTransBuySell(c_price + tonumber(min_precision), quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
 			else
 				PrintDbgStr(string.format("vrfma: WarmStart. B. c_price-: %s (tab[price] - profit): %s status: %s account: %s client: %s instr_name: %s instr_class: %s текущий instr_name: %s profit: %s", 
 									tostring(c_price), 
@@ -493,7 +495,7 @@ function GapFilling(c_price_in)
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. hole_part: %s ограничиваем до 12", tostring(hole_part)))
 			file_log:write(string.format("%s Ограничение гэпа. S. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
 		end
-		SendTransBuySell(c_price_in + tonumber(min_precision), hole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		SendTransBuySell(c_price_in - tonumber(min_precision), hole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
 		for cnt = 1, hole_part do
 			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
 										["number_sys"] = 0, 
@@ -557,7 +559,7 @@ function GapFilling(c_price_in)
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. hole_part: %s ограничиваем до 12", tostring(hole_part)))
 			file_log:write(string.format("%s Ограничение гэпа. B. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
 		end
-		SendTransBuySell(c_price_in - tonumber(min_precision), hole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		SendTransBuySell(c_price_in + tonumber(min_precision), hole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
 		for cnt = 1, hole_part do
 			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
 										["number_sys"] = 0, 
