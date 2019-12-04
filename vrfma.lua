@@ -465,14 +465,14 @@ function GapFilling(c_price_in)
 		if tab["operation"] == 'S' then
 			if tab["instr_name"] == instr_name and tonumber(tab["price"]) > s_greater then
 				s_greater = tonumber(tab["price"])
-				s_account = tonumber(tab["account"])
-				s_client = tonumber(tab["client"])
+				s_account = tab["account"]
+				s_client = tab["client"]
 			end
 		else
 			if tab["instr_name"] == instr_name and tonumber(tab["price"]) < b_minor then
 				b_minor = tonumber(tab["price"])
-				b_account = tonumber(tab["account"])
-				b_client = tonumber(tab["client"])
+				b_account = tab["account"]
+				b_client = tab["client"]
 			end
 		end
 	end
@@ -481,11 +481,11 @@ function GapFilling(c_price_in)
 -- ищем и обрабатываем гэп
 	if tonumber(s_greater) ~= 0 and tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
 		hole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
-		PrintDbgStr(string.format("vrfma: Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано: %s бумаг", 
+		PrintDbgStr(string.format("vrfma: Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано бумаг: %s ", 
 									tostring(c_price_in), 
 									tostring(s_greater), 
 									tostring(hole_part)))
-		file_log:write(string.format("%s Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано: %s бумаг\n", 
+		file_log:write(string.format("%s Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано бумаг: %s \n", 
 									os.date(),
 									tostring(c_price_in), 
 									tostring(s_greater), 
@@ -521,19 +521,19 @@ function GapFilling(c_price_in)
 												["instr_name"] = instr_name,
 												["instr_class"] = instr_class,
 												["profit"] = profit})
-			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %i операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
 											tostring(free_TRANS_ID),
-											tonumber(s_greater) + order_interval * cnt,
+											tostring(tonumber(s_greater) + order_interval * cnt),
 											tostring(quantity),
 											tostring(s_account),
 											tostring(s_client),
 											tostring(instr_name),
 											tostring(instr_class),
 											tostring(profit)))
-			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
 											os.date(), 
 											tostring(free_TRANS_ID),
-											tonumber(s_greater) + order_interval * cnt,
+											tostring(tonumber(s_greater) + order_interval * cnt),
 											tostring(quantity),
 											tostring(s_account),
 											tostring(s_client),
@@ -545,11 +545,11 @@ function GapFilling(c_price_in)
 	end
 	if tonumber(b_minor) ~= 1000000 and tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
 		hole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
-		PrintDbgStr(string.format("vrfma: Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено: %s бумаг", 
+		PrintDbgStr(string.format("vrfma: Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено бумаг: %s ", 
 									tostring(c_price_in), 
 									tostring(b_minor), 
 									tostring(hole_part)))
-		file_log:write(string.format("%s Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено: %s бумаг\n", 
+		file_log:write(string.format("%s Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено бумаг: %s \n", 
 									os.date(),
 									tostring(c_price_in), 
 									tostring(b_minor), 
