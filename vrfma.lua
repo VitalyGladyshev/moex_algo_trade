@@ -1,3 +1,8 @@
+-- vrfma
+version = 0.996
+-- min_precision менять руками!!!!!
+min_precision = 0.01
+
 --[[
 1 V Перенести записи в лог файл из обработчиков в main
 2 V После отладки уменьшить вывод отладочных сообщений
@@ -19,13 +24,14 @@
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
 17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
 18 v Доделать обработку клиринга. Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
-19 Ограничение на количество в секунду при расстановке twin-ов
+19 Илья видел предупреждение. Подозревает, что нарушено ограничение на количество в секунду при расстановке twin-ов на ВТБ демо
 20 Убрал срабатывание OrdVer по twin подумать как вернуть...
 ]]
+
 function OnInit()	-- событие - инициализация QUIK
 	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_vrfma.log", "w")
-	PrintDbgStr("vrfma: Событие - инициализация QUIK")
-	file_log:write(os.date() .. " vrfma запущен (инициализация)\n")
+	PrintDbgStr(string.format("vrfma версия %05.3f: Событие - инициализация QUIK", version))
+	file_log:write(string.format("%s vrfma версия %05.3ff запущен (инициализация)\n", os.date(), version))
 	load_error = false
 	file_ini = io.open(getScriptPath() .. "\\vrfma.ini", "r")
 	if file_ini ~= nil then
@@ -112,8 +118,6 @@ function OnInit()	-- событие - инициализация QUIK
 	t2350ko = true
 	timer_done = false
 	timer_start = false
--- min_precision менять руками!!!!!
-	min_precision = 0.01
 	clearing_test_count = 6000
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
@@ -763,7 +767,11 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 	instr_class_in = instr_class_in or instr_class
 	twin_num = twin_num or "0"
 	profit_in = profit_in or profit
-	write_to_table = write_to_table or true
+	if write_to_table == nil then
+		write_to_table = true
+	else
+		write_to_table = false
+	end
 	
 	local transaction = {}
 	transaction['TRANS_ID'] = tostring(free_TRANS_ID)
