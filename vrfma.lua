@@ -1187,7 +1187,7 @@ function main()
 		end
 		if timer_start then
 			timer_start = false
-			sleep(2000)
+			sleep(1100)
 			timer_done = true
 		else
 			sleep(50)
