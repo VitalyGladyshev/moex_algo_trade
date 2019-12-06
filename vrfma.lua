@@ -356,6 +356,9 @@ for ind, tab_n in pairs(start_trades_tbl) do
 								tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
 end]]
 		end
+	else
+		PrintDbgStr(string.format("vrfma:  лиринг обнаружен, проверка заблокирована"))
+		file_log:write(string.format("%s  лиринг обнаружен, проверка заблокирована\n", os.date()))
 	end
 end
 
