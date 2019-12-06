@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.004
+version = 1.005
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -119,6 +119,7 @@ function OnInit()	-- событие - инициализация QUIK
 	t2350ko = true
 	t1906cl = false
 	stat_3 = false
+	clearing_now = false
 	timer_done = false
 	timer_start = false
 	clearing_test_count = 6000
@@ -197,7 +198,8 @@ function CheckTradePeriod()
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 	end
 	if tonumber(now_dt.hour) == 19 and tonumber(now_dt.min) >= 06 and t1906cl then
-		t1906cl = true
+		t1906cl = false
+		clearing_now = false
 		PrintDbgStr(string.format("vrfma: реакция на клиринг. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " реакция на клиринг.\n")
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
@@ -210,7 +212,8 @@ function CheckTradePeriod()
 		stat_3 = false
 	end
 	if tonumber(now_dt.hour) == 16 and tonumber(now_dt.min) >= 06 and t1906cl then		-- для демо счёта ВТБ потом убрать
-		t1906cl = true
+		t1906cl = false
+		clearing_now = false
 		PrintDbgStr(string.format("vrfma: реакция на клиринг. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " реакция на клиринг.\n")
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
@@ -279,67 +282,69 @@ function KillAllOrders(classCode, secCode, brokerref)	-- Нашёл на форуме QUIK и 
 end
 
 function ClearingTest()
-	PrintDbgStr(string.format("vrfma: Проверка на клиринг"))
-	file_log:write(string.format("%s Проверка на клиринг\n", os.date()))
-	reset_table = false
-	stat_3 = false
-	number_sys_forsearch = 0
+	if not clearing_now then
+		PrintDbgStr(string.format("vrfma: Проверка на клиринг"))
+		file_log:write(string.format("%s Проверка на клиринг\n", os.date()))
+		reset_table = false
+		stat_3 = false
+		number_sys_forsearch = 0
 
-	function myFindClearing(ON, F)
-		return (ON == number_sys_forsearch) and (bit.band(F, 0x1) ~= 0)
-	end
+		function myFindClearing(ON, F)
+			return (ON == number_sys_forsearch) and (bit.band(F, 0x1) ~= 0)
+		end
 
-	for _, tab in pairs(trades_tbl) do
-		if tostring(tab["status"]) == "2" then	
-			number_sys_forsearch = tab["number_sys"]
-			local ord = "orders"
-			local orders = SearchItems(ord, 0, getNumberOf(ord)-1, myFindClearing, "order_num,flags")
-			if (orders == nil) or (#orders == 0) then
-				PrintDbgStr(string.format("vrfma: Заявка %s из таблицы trades_tbl не найдена в системе (orders). Делаем сброс и новую расстановку!", tostring(number_sys_forsearch)))
-				file_log:write(string.format("%s Заявка %s из таблицы trades_tbl не найдена в системе (orders). Делаем сброс и новую расстановку!\n", os.date(), tostring(number_sys_forsearch)))
-				reset_table = true
-				break
+		for _, tab in pairs(trades_tbl) do
+			if tostring(tab["status"]) == "2" then	
+				number_sys_forsearch = tab["number_sys"]
+				local ord = "orders"
+				local orders = SearchItems(ord, 0, getNumberOf(ord)-1, myFindClearing, "order_num,flags")
+				if (orders == nil) or (#orders == 0) then
+					PrintDbgStr(string.format("vrfma: Заявка %s из таблицы trades_tbl не найдена в системе (orders). Делаем сброс и новую расстановку!", tostring(number_sys_forsearch)))
+					file_log:write(string.format("%s Заявка %s из таблицы trades_tbl не найдена в системе (orders). Делаем сброс и новую расстановку!\n", os.date(), tostring(number_sys_forsearch)))
+					reset_table = true
+					clearing_now = true
+					break
+				end
 			end
 		end
-	end
-	if reset_table then
-		for ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
-			start_trades_tbl[ind_st_tb] = nil
-		end
-		for ind, tab_n in pairs(trades_tbl) do
-			PrintDbgStr(string.format("vrfma: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
-												tostring(tab_n["number_my"]), 
-												tostring(tab_n["number_sys"]), 
-												tostring(tab_n["status"]), 
-												tostring(tab_n["operation"]), 
-												tostring(tab_n["price"]), 
-												tostring(tab_n["twin"]),
-												tostring(tab_n["quantity_current"]),
-												tostring(tab_n["account"]),
-												tostring(tab_n["client"]),
-												tostring(tab_n["instr_name"]),
-												tostring(tab_n["instr_class"]),
-												tostring(tab_n["profit"])))
-			if tostring(tab_n["status"]) ~= "3" then
-				trades_tbl[ind] = nil
-			else
-				stat_3 = true
-				table.sinsert(start_trades_tbl, {	["number_my"]			= tab_n["number_my"], 
-													["number_sys"]			= tab_n["number_sys"], 
-													["price"]				= tab_n["price"], 
-													["operation"]			= tab_n["operation"], 
-													["status"]				= tab_n["status"], 
-													["twin"] 				= tab_n["twin"],
-													["quantity_current"] 	= tab_n["quantity_current"],
-													["account"]				= tab_n["account"],
-													["client"]				= tab_n["client"],
-													["instr_name"]			= tab_n["instr_name"],
-													["instr_class"]			= tab_n["instr_class"],
-													["profit"]				= tab_n["profit"]})
+		if reset_table then
+			for ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
+				start_trades_tbl[ind_st_tb] = nil
 			end
-		end
-		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
-		t1906cl = true
+			for ind, tab_n in pairs(trades_tbl) do
+				PrintDbgStr(string.format("vrfma: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
+													tostring(tab_n["number_my"]), 
+													tostring(tab_n["number_sys"]), 
+													tostring(tab_n["status"]), 
+													tostring(tab_n["operation"]), 
+													tostring(tab_n["price"]), 
+													tostring(tab_n["twin"]),
+													tostring(tab_n["quantity_current"]),
+													tostring(tab_n["account"]),
+													tostring(tab_n["client"]),
+													tostring(tab_n["instr_name"]),
+													tostring(tab_n["instr_class"]),
+													tostring(tab_n["profit"])))
+				if tostring(tab_n["status"]) ~= "3" then
+					trades_tbl[ind] = nil
+				else
+					stat_3 = true
+					table.sinsert(start_trades_tbl, {	["number_my"]			= tab_n["number_my"], 
+														["number_sys"]			= tab_n["number_sys"], 
+														["price"]				= tab_n["price"], 
+														["operation"]			= tab_n["operation"], 
+														["status"]				= tab_n["status"], 
+														["twin"] 				= tab_n["twin"],
+														["quantity_current"] 	= tab_n["quantity_current"],
+														["account"]				= tab_n["account"],
+														["client"]				= tab_n["client"],
+														["instr_name"]			= tab_n["instr_name"],
+														["instr_class"]			= tab_n["instr_class"],
+														["profit"]				= tab_n["profit"]})
+				end
+			end
+			KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
+			t1906cl = true
 --[[ for ind, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("vrfma: распечатываем trades_tbl после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 									tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
@@ -350,6 +355,7 @@ for ind, tab_n in pairs(start_trades_tbl) do
 								tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
 								tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
 end]]
+		end
 	end
 end
 
