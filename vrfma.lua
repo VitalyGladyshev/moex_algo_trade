@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.002
+version = 1.004
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -26,6 +26,7 @@ min_precision = 0.01
 18 V Доделать обработку клиринга. Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
 19 Илья видел предупреждение. Подозревает, что нарушено ограничение на количество в секунду при расстановке twin-ов на ВТБ демо
 20 info Иногда заявки со статусом 1 не исполняются сервером и не отклоняются (при исчерпании депозита например). Продумать реакцию
+21 info Проверка на клиринг произошла в момент между созданием заявки и подтверждением (пока status 1). Проверка сработала!!!
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -120,7 +121,7 @@ function OnInit()	-- событие - инициализация QUIK
 	stat_3 = false
 	timer_done = false
 	timer_start = false
-	clearing_test_count = 1200
+	clearing_test_count = 6000
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
 		PrintDbgStr(string.format("vrfma: Загрузка записей из trades_tbl.dat"))
@@ -355,6 +356,8 @@ end
 function NewBasePrice(test_price, curr_price)
 	local delta = curr_price - test_price	--local delta = test_price - curr_price
 	whole_part, fractional_part = math.modf(delta/order_interval)
+	PrintDbgStr(string.format("vrfma: NewBasePrice test_price: %s curr_price: %s delta: %s whole_part: %s fractional_part: %s res: %s", 
+								tostring(test_price), tostring(curr_price), tostring(delta), tostring(whole_part), tostring(fractional_part), tostring(test_price + order_interval * whole_part)))
 	return test_price + order_interval * whole_part	--return curr_price + delta - order_interval * whole_part
 end
 
@@ -983,8 +986,8 @@ end ]]
 					end
 				end
 				trades_tbl[ind_1] = nil
-				if tonumber(current_price) > 0 and tonumber(base_price) > 0 then
-					base_price = NewBasePrice(base_price, current_price)
+				if tonumber(trade.price) > 0 and tonumber(base_price) > 0 then
+					base_price = NewBasePrice(base_price, tonumber(trade.price))
 				end
 --[[for ind_n, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
@@ -1047,7 +1050,7 @@ function OrdersVerification(b_price)
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
 			-- PrintDbgStr(string.format("vrfma: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
-			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) and tostring(tab["twin"]) == "0" then
+			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) and tostring(tab["status"]) ~= "3" then	-- tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("vrfma: OrdersVerification. B. pos_not_used = false цена: %s", tostring(b_price - order_interval * cnt)))
 				break
@@ -1059,7 +1062,7 @@ function OrdersVerification(b_price)
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
 			-- PrintDbgStr(string.format("vrfma: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
-			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) and tostring(tab["twin"]) == "0" then
+			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) and tostring(tab["status"]) ~= "3" then	-- tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("vrfma: OrdersVerification. S. pos_not_used = false цена: %s", tostring(b_price + order_interval * cnt)))
 				break
@@ -1180,7 +1183,7 @@ function main()
 		end
 		CheckTradePeriod()
 		if tonumber(clearing_test_count) <= 0 then
-			clearing_test_count = 1200
+			clearing_test_count = 6000
 			ClearingTest()
 		else
 			clearing_test_count = clearing_test_count - 1
