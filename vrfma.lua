@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.005
+version = 1.008
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -12,7 +12,8 @@ min_precision = 0.01
 6 V Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 7 ! Не сошлось количество записей о бумагах с остатком !
 8 При восстановлении twin'ов сделать проверку на текущую цену
-9 info Появлялись в таблице заявки со статусом 1
+9 info !!! Появлялись в таблице заявки со статусом 1
+	   !!! Окончательно разъяснить нюансы удаления в цикле
 10 info Была потеряна реакция на одну сделку при одновременном срабатывании четырёх сделок - делать больше дельту
 11 v Возможно надо сменить подход и не ставить заявки вне диапазона, а не удалять их. 
 	 Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
@@ -23,7 +24,7 @@ min_precision = 0.01
 15 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
 16 Выяснить причины перетока 2х заявок со счёта на счёт! info Заблокировал дичь с ДВОЙНОЙ ПОЛНОЙ расстановкой в режиме "Только реализация" см. лог
 17 Выявлены проблемы с удалением. Возможно надо сделать преварителое удаление по таблице заявок
-18 V Доделать обработку клиринга. Старый алгоритм его не купировал. Заявки удалялись системой, но оставались в таблице программы
+18 V Продумать обработку клиринга. Всё блокируется до окончания клиринга, даже если проверка сработала не по клирингу. старое: Заявки удалялись системой, но оставались в таблице программы
 19 Илья видел предупреждение. Подозревает, что нарушено ограничение на количество в секунду при расстановке twin-ов на ВТБ демо
 20 info Иногда заявки со статусом 1 не исполняются сервером и не отклоняются (при исчерпании депозита например). Продумать реакцию
 21 info Проверка на клиринг произошла в момент между созданием заявки и подтверждением (пока status 1). Проверка сработала!!!
@@ -198,8 +199,6 @@ function CheckTradePeriod()
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 	end
 	if tonumber(now_dt.hour) == 19 and tonumber(now_dt.min) >= 06 and t1906cl then
-		t1906cl = false
-		clearing_now = false
 		PrintDbgStr(string.format("vrfma: реакция на клиринг. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " реакция на клиринг.\n")
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
@@ -210,10 +209,10 @@ function CheckTradePeriod()
 			cold_start = true
 		end
 		stat_3 = false
+		clearing_now = false
+		t1906cl = false
 	end
 	if tonumber(now_dt.hour) == 16 and tonumber(now_dt.min) >= 06 and t1906cl then		-- для демо счёта ВТБ потом убрать
-		t1906cl = false
-		clearing_now = false
 		PrintDbgStr(string.format("vrfma: реакция на клиринг. Время: %s", tostring(os.date())))
 		file_log:write(os.date() .. " реакция на клиринг.\n")
 		KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
@@ -224,6 +223,8 @@ function CheckTradePeriod()
 			cold_start = true
 		end
 		stat_3 = false
+		clearing_now = false
+		t1906cl = false
 	end
 end
 
@@ -308,8 +309,8 @@ function ClearingTest()
 			end
 		end
 		if reset_table then
-			for ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
-				start_trades_tbl[ind_st_tb] = nil
+			for ind_st_tb = #start_trades_tbl, 1, -1 do	-- ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
+				table.remove(start_trades_tbl, ind_st_tb)
 			end
 			for ind, tab_n in pairs(trades_tbl) do
 				PrintDbgStr(string.format("vrfma: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
@@ -345,7 +346,7 @@ function ClearingTest()
 			end
 			KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 			t1906cl = true
---[[ for ind, tab_n in pairs(trades_tbl) do
+for ind, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("vrfma: распечатываем trades_tbl после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 									tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
 									tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
@@ -354,7 +355,7 @@ for ind, tab_n in pairs(start_trades_tbl) do
 	PrintDbgStr(string.format("vrfma: распечатываем start_trades_tbl после пересоздания Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 								tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
 								tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
-end]]
+end
 		end
 	else
 		PrintDbgStr(string.format("vrfma: Клиринг обнаружен, проверка заблокирована"))
@@ -365,9 +366,17 @@ end
 function NewBasePrice(test_price, curr_price)
 	local delta = curr_price - test_price	--local delta = test_price - curr_price
 	whole_part, fractional_part = math.modf(delta/order_interval)
-	PrintDbgStr(string.format("vrfma: NewBasePrice test_price: %s curr_price: %s delta: %s whole_part: %s fractional_part: %s res: %s", 
-								tostring(test_price), tostring(curr_price), tostring(delta), tostring(whole_part), tostring(fractional_part), tostring(test_price + order_interval * whole_part)))
-	return test_price + order_interval * whole_part	--return curr_price + delta - order_interval * whole_part
+	if math.abs(fractional_part) > 0.5 then
+		if fractional_part > 0 then
+			whole_part = whole_part + 1
+		else
+			whole_part = whole_part - 1
+		end
+	end
+	local res_price = test_price + order_interval * whole_part	--return curr_price + delta - order_interval * whole_part
+	PrintDbgStr(string.format("vrfma: NewBasePrice test_price: %s curr_price: %s delta: %s whole_part: %s fractional_part: %s res_price: %s", 
+								tostring(test_price), tostring(curr_price), tostring(delta), tostring(whole_part), tostring(fractional_part), tostring(res_price)))
+	return res_price
 end
 
 function OnParam(class, sec)
@@ -376,7 +385,7 @@ function OnParam(class, sec)
 		if res ~= 0 then
 			PrintDbgStr(string.format("vrfma: %s %s: %.2f", os.date(), instr_name, res.param_value))
 			file_log:write(string.format("%s %s: %.2f\n", os.date(), instr_name, res.param_value))
-			if tostring(current_price) == tostring(res.param_value) then
+			if tostring(current_price) == tostring(res.param_value) or t1906cl then
 				return
 --[[tostring(			elseif abs(current_price - res.param_value) > order_interval * 200 then
 				PrintDbgStr(string.format("vrfma: Ошибка! Некорректная цена: %.2f", res.param_value))
@@ -427,7 +436,7 @@ function OnParam(class, sec)
 							PrintDbgStr(string.format("vrfma: Новый инструмент base_price = current_price: %.2f", base_price))
 							file_log:write(string.format("%s Новый инструмент base_price = current_price: %.2f\n", os.date(), base_price))
 						end
-						WarmStart(base_price, current_price)
+						WarmStart(current_price)
 						return
 					end
 				end
@@ -477,7 +486,7 @@ function ColdStart(counter, b_price)
 	end	
 end
 
-function WarmStart(b_price, c_price)
+function WarmStart(c_price)
 	PrintDbgStr(string.format("vrfma: WarmStart"))
 	file_log:write(string.format("%s WarmStart\n", os.date()))
 	GapFilling(c_price)
@@ -538,13 +547,13 @@ function WarmStart(b_price, c_price)
 		sleep(110)
 	end
 	if not ban_new_ord then
-		OrdersVerification(b_price)
+		OrdersVerification(base_price)
 	end
 end
 
 function GapFilling(c_price_in)
-	s_greater = 0
-	b_minor = 1000000
+	local s_greater = 0
+	local b_minor = 1000000
 	for _, tab in pairs(start_trades_tbl) do
 		if tab["operation"] == 'S' then
 			if tab["instr_name"] == instr_name and tonumber(tab["price"]) > s_greater then
@@ -564,23 +573,30 @@ function GapFilling(c_price_in)
 	file_log:write(string.format("%s Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s\n", os.date(), tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 -- ищем и обрабатываем гэп
 	if tonumber(s_greater) ~= 0 and tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
-		hole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
+		whole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
+		if math.abs(fractional_part) > 0.97 then
+			whole_part = whole_part + 1
+		end
 		PrintDbgStr(string.format("vrfma: Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано бумаг: %s ", 
 									tostring(c_price_in), 
 									tostring(s_greater), 
-									tostring(hole_part)))
+									tostring(whole_part)))
 		file_log:write(string.format("%s Обнаружен гэп. S. c_price_in: %s s_greater: %s Будет продано бумаг: %s \n", 
 									os.date(),
 									tostring(c_price_in), 
 									tostring(s_greater), 
-									tostring(hole_part)))
-		if tonumber(hole_part) > 12 then
-			hole_part = 12
-			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. hole_part: %s ограничиваем до 12", tostring(hole_part)))
-			file_log:write(string.format("%s Ограничение гэпа. S. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
+									tostring(whole_part)))
+		if tonumber(whole_part) > 12 then
+			whole_part = 12
+			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. whole_part: %s ограничиваем до 12", tostring(whole_part)))
+			file_log:write(string.format("%s Ограничение гэпа. S. whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+		else
+			base_price = tonumber(s_greater) + order_interval * (whole_part + 1)
+			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s s_greater: %s whole_part: %s fractional_part: %s", 
+										tostring(base_price), tostring(c_price_in), tostring(s_greater), tostring(whole_part), tostring(fractional_part)))
 		end
-		SendTransBuySell(c_price_in - tonumber(min_precision), hole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
-		for cnt = 1, hole_part do
+		SendTransBuySell(c_price_in - tonumber(min_precision), whole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		for cnt = 1, whole_part do
 			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
 										["number_sys"] = free_TRANS_ID, 
 										["price"] = tonumber(s_greater) + order_interval * cnt, 
@@ -628,23 +644,30 @@ function GapFilling(c_price_in)
 		end
 	end
 	if tonumber(b_minor) ~= 1000000 and tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
-		hole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
+		whole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
+		if math.abs(fractional_part) > 0.97 then
+			whole_part = whole_part + 1
+		end
 		PrintDbgStr(string.format("vrfma: Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено бумаг: %s ", 
 									tostring(c_price_in), 
 									tostring(b_minor), 
-									tostring(hole_part)))
+									tostring(whole_part)))
 		file_log:write(string.format("%s Обнаружен гэп. B. c_price_in: %s b_minor: %s Будет приобретено бумаг: %s \n", 
 									os.date(),
 									tostring(c_price_in), 
 									tostring(b_minor), 
-									tostring(hole_part)))
-		if tonumber(hole_part) > 12 then
-			hole_part = 12
-			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. hole_part: %s ограничиваем до 12", tostring(hole_part)))
-			file_log:write(string.format("%s Ограничение гэпа. B. hole_part: %s ограничиваем до 12\n", os.date(), tostring(hole_part)))
+									tostring(whole_part)))
+		if tonumber(whole_part) > 12 then
+			whole_part = 12
+			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. whole_part: %s ограничиваем до 12", tostring(whole_part)))
+			file_log:write(string.format("%s Ограничение гэпа. B. whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+		else
+			base_price = tonumber(b_minor) - order_interval * (whole_part + 1)
+			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
+										tostring(base_price), tostring(c_price_in), tostring(b_minor), tostring(whole_part), tostring(fractional_part)))
 		end
-		SendTransBuySell(c_price_in + tonumber(min_precision), hole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
-		for cnt = 1, hole_part do
+		SendTransBuySell(c_price_in + tonumber(min_precision), whole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
+		for cnt = 1, whole_part do
 			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
 										["number_sys"] = free_TRANS_ID, 
 										["price"] = tonumber(b_minor) - order_interval * cnt, 
@@ -915,7 +938,7 @@ function SendTransClose(close_ID)		-- Снятие заявки
 		for ind, tab in pairs(trades_tbl) do
 			if tostring(tab["number_sys"]) == tostring(close_ID) then
 				price = tab["price"]
-				trades_tbl[ind] = nil
+				table.remove(trades_tbl, ind) -- trades_tbl[ind] = nil
 				break
 			end
 		end
