@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.008
+version = 1.009
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -232,9 +232,10 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 	for _, tab in pairs(trades_tbl) do
 		if tostring(tab["status"]) == "2" then
 			SendTransClose(tab["number_sys"])
+			sleep(50)
 		end
 	end
-	sleep(100)
+	sleep(50)
 	KillAllOrders(instr_class_in, instr_name_in, client_in)
 	if prev_instr_name_in ~= nil then
 		KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_in)
@@ -275,6 +276,7 @@ function KillAllOrders(classCode, secCode, brokerref)	-- Нашёл на форуме QUIK и 
 				file_log:write(string.format("	Транзакция %s отправлена. Снятие заявки: %s\n", free_TRANS_ID, tostring(getItem(ord,orders[i]).order_num)))
 			end
 			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			sleep(50)
 		end
 	end
 	PrintDbgStr(string.format("vrfma: Удаление всех заявок завершено"))
