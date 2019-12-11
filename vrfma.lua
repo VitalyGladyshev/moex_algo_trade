@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.009
+version = 1.010
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -593,7 +593,7 @@ function GapFilling(c_price_in)
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. S. whole_part: %s ограничиваем до 12", tostring(whole_part)))
 			file_log:write(string.format("%s Ограничение гэпа. S. whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
 		else
-			base_price = tonumber(s_greater) + order_interval * (whole_part + 1)
+			base_price = tonumber(s_greater) + order_interval * whole_part
 			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s s_greater: %s whole_part: %s fractional_part: %s", 
 										tostring(base_price), tostring(c_price_in), tostring(s_greater), tostring(whole_part), tostring(fractional_part)))
 		end
@@ -664,7 +664,7 @@ function GapFilling(c_price_in)
 			PrintDbgStr(string.format("vrfma: Ограничение гэпа. B. whole_part: %s ограничиваем до 12", tostring(whole_part)))
 			file_log:write(string.format("%s Ограничение гэпа. B. whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
 		else
-			base_price = tonumber(b_minor) - order_interval * (whole_part + 1)
+			base_price = tonumber(b_minor) - order_interval * whole_part
 			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
 										tostring(base_price), tostring(c_price_in), tostring(b_minor), tostring(whole_part), tostring(fractional_part)))
 		end
@@ -997,7 +997,7 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
---[[for ind_n, tab_n in pairs(trades_tbl) do
+for ind_n, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем до удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 										tostring(tab_n["number_my"]), 
 										tostring(tab_n["number_sys"]), 
@@ -1011,19 +1011,24 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 										tostring(tab_n["instr_name"]),
 										tostring(tab_n["instr_class"]),
 										tostring(tab_n["profit"])))
-end ]]
+end
+				local order_number_sys_for_remove = tostring(tab["twin"])		-- в поле twin номер породившей twin заявки
+				local twin_number_sys_for_remove = tostring(tab["number_sys"])	-- эта заявка - twin
+				table.remove(trades_tbl, ind_1)				-- trades_tbl[ind_1] = nil
 				for ind_2, tab_2 in pairs(trades_tbl) do
-					if tostring(tab["twin"]) == tostring(tab_2["number_sys"]) then
-						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", tostring(tab["number_sys"]), tostring(tab["twin"]), tostring(tab_2["number_sys"])))
-						trades_tbl[ind_2] = nil
+					if order_number_sys_for_remove == tostring(tab_2["number_sys"]) then
+						PrintDbgStr(string.format("vrfma: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", 
+							twin_number_sys_for_remove, 
+							order_number_sys_for_remove, 
+							tostring(tab_2["number_sys"])))
+						table.remove(trades_tbl, ind_2)		-- trades_tbl[ind_2] = nil
 						break
 					end
 				end
-				trades_tbl[ind_1] = nil
 				if tonumber(trade.price) > 0 and tonumber(base_price) > 0 then
 					base_price = NewBasePrice(base_price, tonumber(trade.price))
 				end
---[[for ind_n, tab_n in pairs(trades_tbl) do
+for ind_n, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("vrfma: trades_tbl распечатываем после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 										tostring(tab_n["number_my"]), 
 										tostring(tab_n["number_sys"]), 
@@ -1037,7 +1042,7 @@ end ]]
 										tostring(tab_n["instr_name"]),
 										tostring(tab_n["instr_class"]),
 										tostring(tab_n["profit"])))
-end ]]
+end
 			end
 			if not ban_new_ord then
 				OrdersVerification(base_price)
