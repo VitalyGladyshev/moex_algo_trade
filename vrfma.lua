@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.012
+version = 1.013
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -121,8 +121,8 @@ function OnInit()	-- событие - инициализация QUIK
 	t2350ko = true
 	stat_3 = false
 	clearing_now = false
-	timer_done = false
-	timer_start = false
+	deviation_timer = false
+	deviation_count = 0
 	clearing_test_count = 6000
 	file_load_table = io.open(file_name_for_load, "r")
 	if file_load_table ~= nil then
@@ -412,7 +412,7 @@ function OnParam(class, sec)
 					if cold_start then
 						base_price = res.param_value
 						if not ban_new_ord then
-							ColdStart(10, base_price)	--PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
+							ColdStart(10, base_price)	-- PrintDbgStr(string.format("vrfma: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", type(tmp), tonumber(tmp)))
 						end
 						return
 					else
@@ -431,15 +431,22 @@ function OnParam(class, sec)
 				end
 			-- при изменении цены более чем на order_interval * 1.6 обновляем заявки (при изменении на order_interval должна срабатывать заявка), если 	заявка не обновила base_price сработает эта защита
 				if math.abs(current_price - base_price) > (order_interval * 1.6) and not ban_new_ord then
-					if timer_done then
-						PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
-						base_price = NewBasePrice(base_price, current_price)
-						OrdersVerification(base_price)
+					if deviation_timer then
+						if deviation_count <= 0 then
+							deviation_timer = false
+							deviation_count = 0
+							PrintDbgStr(string.format("vrfma: Цена current_price: %.2f отклонилась от base_price: %.2f", current_price, base_price))
+							base_price = NewBasePrice(base_price, current_price)
+							OrdersVerification(base_price)
+						end
 					else
-						timer_start = true
+						deviation_timer = true
+						deviation_count = 40
 					end
+				else
+					deviation_timer = false
+					deviation_count = 0
 				end
-				timer_done = false
 			-- используем ячейку base_price
 	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
 					(current_price < base_price and current_price > base_price - order_interval) then
@@ -1217,20 +1224,17 @@ function main()
 		end
 		if clearing_now then
 			clearing_now_cnt = clearing_now_cnt + 1
-			if clearing_now_cnt > 24000 then
+			if clearing_now_cnt >= 24000 then
 				clearing_now_cnt = 0
 				ClearingReaction()
 			end
 		else 
 			clearing_now_cnt = 0
 		end
-		if timer_start then
-			timer_start = false
-			sleep(1100)
-			timer_done = true
-		else
-			sleep(50)
+		if tonumber(deviation_count) > 0 then
+			deviation_count = deviation_count - 1
 		end
+		sleep(50)
 	end
 	ExitMess()
 end
