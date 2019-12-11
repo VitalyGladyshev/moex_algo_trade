@@ -568,146 +568,156 @@ function GapFilling(c_price_in)
 	PrintDbgStr(string.format("vrfma: Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s", tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 	file_log:write(string.format("%s Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s\n", os.date(), tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 -- ищем и обрабатываем гэп
-	if tonumber(s_greater) ~= 0 and tonumber(c_price_in) > tonumber(s_greater) + order_interval and tonumber(b_minor) == 1000000 then
-		whole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
-		if math.abs(fractional_part) > 0.97 then
-			whole_part = whole_part + 1
-		end
-		PrintDbgStr(string.format("vrfma: Обнаружен гэп S c_price_in: %s s_greater: %s Будет продано бумаг: %s ", 
-									tostring(c_price_in), 
-									tostring(s_greater), 
-									tostring(whole_part)))
-		file_log:write(string.format("%s Обнаружен гэп S c_price_in: %s s_greater: %s Будет продано бумаг: %s \n", 
-									os.date(),
-									tostring(c_price_in), 
-									tostring(s_greater), 
-									tostring(whole_part)))
-		if tonumber(whole_part) > 12 then
-			whole_part = 12
-			PrintDbgStr(string.format("vrfma: Ограничение гэпа S whole_part: %s ограничиваем до 12", tostring(whole_part)))
-			file_log:write(string.format("%s Ограничение гэпа S whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+	if tonumber(s_greater) ~= 0 and tonumber(b_minor) == 1000000 then
+		if tonumber(c_price_in) > tonumber(s_greater) + order_interval then
+			whole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
+			if math.abs(fractional_part) > 0.97 then
+				whole_part = whole_part + 1
+			end
+			PrintDbgStr(string.format("vrfma: Обнаружен гэп S c_price_in: %s s_greater: %s Будет продано бумаг: %s ", 
+										tostring(c_price_in), 
+										tostring(s_greater), 
+										tostring(whole_part)))
+			file_log:write(string.format("%s Обнаружен гэп S c_price_in: %s s_greater: %s Будет продано бумаг: %s \n", 
+										os.date(),
+										tostring(c_price_in), 
+										tostring(s_greater), 
+										tostring(whole_part)))
+			if tonumber(whole_part) > 12 then
+				whole_part = 12
+				PrintDbgStr(string.format("vrfma: Ограничение гэпа S whole_part: %s ограничиваем до 12", tostring(whole_part)))
+				file_log:write(string.format("%s Ограничение гэпа S whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+			else
+				base_price = tonumber(s_greater) + order_interval * whole_part
+				PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s s_greater: %s whole_part: %s fractional_part: %s", 
+											tostring(base_price), tostring(c_price_in), tostring(s_greater), tostring(whole_part), tostring(fractional_part)))
+			end
+			SendTransBuySell(c_price_in - tonumber(min_precision), whole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
+			for cnt = 1, whole_part do
+				table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+											["number_sys"] = free_TRANS_ID, 
+											["price"] = tonumber(s_greater) + order_interval * cnt, 
+											["operation"] = 'S', 
+											["status"] = "3", 
+											["twin"] = "0",
+											["quantity_current"] = quantity,
+											["account"] = s_account,
+											["client"] = s_client,
+											["instr_name"] = instr_name,
+											["instr_class"] = instr_class,
+											["profit"] = profit})
+				table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
+													["number_sys"] = free_TRANS_ID, 
+													["price"] = tonumber(s_greater) + order_interval * cnt, 
+													["operation"] = 'S', 
+													["status"] = "3", 
+													["twin"] = "0",
+													["quantity_current"] = quantity,
+													["account"] = s_account,
+													["client"] = s_client,
+													["instr_name"] = instr_name,
+													["instr_class"] = instr_class,
+													["profit"] = profit})
+				PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+												tostring(free_TRANS_ID),
+												tostring(tonumber(s_greater) + order_interval * cnt),
+												tostring(quantity),
+												tostring(s_account),
+												tostring(s_client),
+												tostring(instr_name),
+												tostring(instr_class),
+												tostring(profit)))
+				file_log:write(string.format("%s Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+												os.date(), 
+												tostring(free_TRANS_ID),
+												tostring(tonumber(s_greater) + order_interval * cnt),
+												tostring(quantity),
+												tostring(s_account),
+												tostring(s_client),
+												tostring(instr_name),
+												tostring(instr_class),
+												tostring(profit)))
+				free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			end
 		else
-			base_price = tonumber(s_greater) + order_interval * whole_part
-			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s s_greater: %s whole_part: %s fractional_part: %s", 
-										tostring(base_price), tostring(c_price_in), tostring(s_greater), tostring(whole_part), tostring(fractional_part)))
-		end
-		SendTransBuySell(c_price_in - tonumber(min_precision), whole_part * quantity, 'S', "0", s_account, s_client, instr_name, instr_class, profit, false)
-		for cnt = 1, whole_part do
-			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
-										["number_sys"] = free_TRANS_ID, 
-										["price"] = tonumber(s_greater) + order_interval * cnt, 
-										["operation"] = 'S', 
-										["status"] = "3", 
-										["twin"] = "0",
-										["quantity_current"] = quantity,
-										["account"] = s_account,
-										["client"] = s_client,
-										["instr_name"] = instr_name,
-										["instr_class"] = instr_class,
-										["profit"] = profit})
-			table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
-												["number_sys"] = free_TRANS_ID, 
-												["price"] = tonumber(s_greater) + order_interval * cnt, 
-												["operation"] = 'S', 
-												["status"] = "3", 
-												["twin"] = "0",
-												["quantity_current"] = quantity,
-												["account"] = s_account,
-												["client"] = s_client,
-												["instr_name"] = instr_name,
-												["instr_class"] = instr_class,
-												["profit"] = profit})
-			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
-											tostring(free_TRANS_ID),
-											tostring(tonumber(s_greater) + order_interval * cnt),
-											tostring(quantity),
-											tostring(s_account),
-											tostring(s_client),
-											tostring(instr_name),
-											tostring(instr_class),
-											tostring(profit)))
-			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %s операция: S количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
-											os.date(), 
-											tostring(free_TRANS_ID),
-											tostring(tonumber(s_greater) + order_interval * cnt),
-											tostring(quantity),
-											tostring(s_account),
-											tostring(s_client),
-											tostring(instr_name),
-											tostring(instr_class),
-											tostring(profit)))
-			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			base_price = tonumber(s_greater)
+			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price = s_greater: %s", tostring(base_price)))
 		end
 	end
-	if tonumber(b_minor) ~= 1000000 and tonumber(c_price_in) < tonumber(b_minor) - order_interval and tonumber(s_greater) == 0 then
-		whole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
-		if math.abs(fractional_part) > 0.97 then
-			whole_part = whole_part + 1
-		end
-		PrintDbgStr(string.format("vrfma: Обнаружен гэп B c_price_in: %s b_minor: %s Будет приобретено бумаг: %s ", 
-									tostring(c_price_in), 
-									tostring(b_minor), 
-									tostring(whole_part)))
-		file_log:write(string.format("%s Обнаружен гэп B c_price_in: %s b_minor: %s Будет приобретено бумаг: %s \n", 
-									os.date(),
-									tostring(c_price_in), 
-									tostring(b_minor), 
-									tostring(whole_part)))
-		if tonumber(whole_part) > 12 then
-			whole_part = 12
-			PrintDbgStr(string.format("vrfma: Ограничение гэпа B whole_part: %s ограничиваем до 12", tostring(whole_part)))
-			file_log:write(string.format("%s Ограничение гэпа B whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+	if tonumber(b_minor) ~= 1000000 and tonumber(s_greater) == 0 then
+		if tonumber(c_price_in) < tonumber(b_minor) - order_interval then
+			whole_part, fractional_part = math.modf((tonumber(b_minor) - tonumber(c_price_in))/order_interval)
+			if math.abs(fractional_part) > 0.97 then
+				whole_part = whole_part + 1
+			end
+			PrintDbgStr(string.format("vrfma: Обнаружен гэп B c_price_in: %s b_minor: %s Будет приобретено бумаг: %s ", 
+										tostring(c_price_in), 
+										tostring(b_minor), 
+										tostring(whole_part)))
+			file_log:write(string.format("%s Обнаружен гэп B c_price_in: %s b_minor: %s Будет приобретено бумаг: %s \n", 
+										os.date(),
+										tostring(c_price_in), 
+										tostring(b_minor), 
+										tostring(whole_part)))
+			if tonumber(whole_part) > 12 then
+				whole_part = 12
+				PrintDbgStr(string.format("vrfma: Ограничение гэпа B whole_part: %s ограничиваем до 12", tostring(whole_part)))
+				file_log:write(string.format("%s Ограничение гэпа B whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+			else
+				base_price = tonumber(b_minor) - order_interval * whole_part
+				PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
+											tostring(base_price), tostring(c_price_in), tostring(b_minor), tostring(whole_part), tostring(fractional_part)))
+			end
+			SendTransBuySell(c_price_in + tonumber(min_precision), whole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
+			for cnt = 1, whole_part do
+				table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
+											["number_sys"] = free_TRANS_ID, 
+											["price"] = tonumber(b_minor) - order_interval * cnt, 
+											["operation"] = 'B', 
+											["status"] = "3", 
+											["twin"] = "0",
+											["quantity_current"] = quantity,
+											["account"] = s_account,
+											["client"] = s_client,
+											["instr_name"] = instr_name,
+											["instr_class"] = instr_class,
+											["profit"] = profit})
+				table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
+													["number_sys"] = free_TRANS_ID, 
+													["price"] = tonumber(b_minor) - order_interval * cnt, 
+													["operation"] = 'B', 
+													["status"] = "3", 
+													["twin"] = "0",
+													["quantity_current"] = quantity,
+													["account"] = s_account,
+													["client"] = s_client,
+													["instr_name"] = instr_name,
+													["instr_class"] = instr_class,
+													["profit"] = profit})
+				PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+												tostring(free_TRANS_ID),
+												tonumber(b_minor) - order_interval * cnt,
+												tostring(quantity),
+												tostring(s_account),
+												tostring(s_client),
+												tostring(instr_name),
+												tostring(instr_class),
+												tostring(profit)))
+				file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+												os.date(), 
+												tostring(free_TRANS_ID),
+												tonumber(b_minor) - order_interval * cnt,
+												tostring(quantity),
+												tostring(s_account),
+												tostring(s_client),
+												tostring(instr_name),
+												tostring(instr_class),
+												tostring(profit)))
+				free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			end
 		else
-			base_price = tonumber(b_minor) - order_interval * whole_part
-			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
-										tostring(base_price), tostring(c_price_in), tostring(b_minor), tostring(whole_part), tostring(fractional_part)))
-		end
-		SendTransBuySell(c_price_in + tonumber(min_precision), whole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
-		for cnt = 1, whole_part do
-			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
-										["number_sys"] = free_TRANS_ID, 
-										["price"] = tonumber(b_minor) - order_interval * cnt, 
-										["operation"] = 'B', 
-										["status"] = "3", 
-										["twin"] = "0",
-										["quantity_current"] = quantity,
-										["account"] = s_account,
-										["client"] = s_client,
-										["instr_name"] = instr_name,
-										["instr_class"] = instr_class,
-										["profit"] = profit})
-			table.sinsert(start_trades_tbl, {	["number_my"] = free_TRANS_ID, 
-												["number_sys"] = free_TRANS_ID, 
-												["price"] = tonumber(b_minor) - order_interval * cnt, 
-												["operation"] = 'B', 
-												["status"] = "3", 
-												["twin"] = "0",
-												["quantity_current"] = quantity,
-												["account"] = s_account,
-												["client"] = s_client,
-												["instr_name"] = instr_name,
-												["instr_class"] = instr_class,
-												["profit"] = profit})
-			PrintDbgStr(string.format("vrfma: Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
-											tostring(free_TRANS_ID),
-											tonumber(b_minor) - order_interval * cnt,
-											tostring(quantity),
-											tostring(s_account),
-											tostring(s_client),
-											tostring(instr_name),
-											tostring(instr_class),
-											tostring(profit)))
-			file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
-											os.date(), 
-											tostring(free_TRANS_ID),
-											tonumber(b_minor) - order_interval * cnt,
-											tostring(quantity),
-											tostring(s_account),
-											tostring(s_client),
-											tostring(instr_name),
-											tostring(instr_class),
-											tostring(profit)))
-			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			base_price = tonumber(b_minor)
+			PrintDbgStr(string.format("vrfma: Задаём base_price при определении гэпа base_price = b_minor: %s ", tostring(base_price)))
 		end
 	end
 end
