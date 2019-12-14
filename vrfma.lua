@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.019
+version = 1.020
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -1253,7 +1253,7 @@ function main()
 		end
 		if clearing_now then
 			clearing_now_cnt = clearing_now_cnt + 1
-			if clearing_now_cnt >= 24000 then
+			if clearing_now_cnt >= 27600 then
 				clearing_now_cnt = 0
 				ClearingReaction()
 			end
