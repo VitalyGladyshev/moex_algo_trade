@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.020
+version = 1.021
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -7,7 +7,7 @@ min_precision = 0.01
 1 V Перенести записи в лог файл из обработчиков в main
 2 После отладки уменьшить вывод отладочных сообщений
 3 V Сделать снятие заявок в полночь и запуск торговли после 10:01
-4 _Продумать обработку при quantity больше единицы
+4 _ Продумать обработку при quantity больше единицы
 5 V Сделать исполнение пропущенных при гэпе заявок с подстановкой цены
 6 ! Не сошлось количество записей о бумагах с остатком !
 7 При восстановлении twin'ов сделать проверку на текущую цену
@@ -17,7 +17,7 @@ min_precision = 0.01
 10 v Возможно надо сменить подход и не ставить заявки вне диапазона, а не удалять их. 
 	 Сделать переключение в/из режима "Только реализация" автоматическим при выходе из "Рабочего диапазона" (верхняя и нижняя границы в ini)
 11 V Два счёта с чередованием (дополнительные реквизиты в ini и чередование в функции SendTransBuySell если нужны параметры по-умолчанию)
-12 V За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
+12 v За пять дней до нового месяца переходить на новую бумагу продолжая реализовывать старые. Для этого писать название 
 	бумаги и класс в таблицу и соответственно в trades_tbl.dat
 13 info На границе сессии бывает удовлетворение по цене не указанной в заявке (в конце сессии аукцион закрытия)
 14 info В 9.50 Тики по MTLR 11/15/19 09:50:11 MTLR: 0.00		11/15/19 09:50:12 MTLR: 0.00
@@ -29,6 +29,9 @@ min_precision = 0.01
 19 info Иногда заявки со статусом 1 не исполняются сервером и не отклоняются (при исчерпании депозита например). Продумать реакцию
 20 info Проверка на клиринг произошла в момент между созданием заявки и подтверждением (пока status 1). Проверка сработала!!!
 21 Attempt to get length of global - разобраться
+	И: Вроде бы изредка возникает ситуация с ошибкой из за совместного обращения к таблице в обработчиках. Может какие то флаги поставить чтобы до выхода из обработки не было обращения?
+	В: При одновременном чтении ошибки маловероятны, а вот при удалении строк в незавершённых циклах могут быть проблемы с индексами.
+		Можно строки не удалять а помечать как аннулированные. А потом очищать централизовано в случае если не запущен ни один из обработчиков или функций
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -919,8 +922,8 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 		file_log:write(string.format("%s Транзакция %s не прошла проверку на стороне терминала QUIK [%s]\n", os.date(), transaction.TRANS_ID, result))
 	else
 		if write_to_table then
-			table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
-										["number_sys"] = 0, 
+			table.sinsert(trades_tbl, {	["number_my"] = tostring(free_TRANS_ID), 
+										["number_sys"] = "0", 
 										["price"] = price, 
 										["operation"] = operation, 
 										["status"] = "1", 
@@ -932,7 +935,7 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 										["instr_class"] = instr_class_in,
 										["profit"] = profit_in}) --order_requests_buy[#order_requests_buy + 1] = free_TRANS_ID
 		end
-		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = transaction.TRANS_ID,	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
+		table.sinsert(QUEUE_SENDTRANSBUYSELL, {	trans_id = tostring(free_TRANS_ID),	--PrintDbgStr(string.format("vrfma: Транзакция %s отправлена. Операция: %s; цена: %s; количество: %s ", transaction.TRANS_ID, operation, price, quant))
 												price = price,
 												operation = operation,
 												quantity = quant,
@@ -942,7 +945,7 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 												instr_name = instr_name_in,
 												instr_class = instr_class_in,
 												profit = profit_in,
-												write_to_table = write_to_table})		
+												write_to_table = tostring(write_to_table)})		
 	end
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
