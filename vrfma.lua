@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.024
+version = 1.025
 -- min_precision мен€ть руками!!!!!
 min_precision = 0.01
 
@@ -461,8 +461,8 @@ function OnParam(class, sec)
 							deviation_timer = false
 							deviation_count = 0
 							PrintDbgStr(string.format("%s: ÷ена current_price: %.2f отклонилась от base_price: %.2f", script_name, current_price, base_price))
-							base_price = NewBasePrice(base_price, current_price)
-							OrdersVerification(base_price)
+							KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)	-- base_price = NewBasePrice(base_price, current_price)
+							StartDeploing() -- OrdersVerification(base_price)
 						end
 					else
 						deviation_timer = true
@@ -472,22 +472,6 @@ function OnParam(class, sec)
 					deviation_timer = false
 					deviation_count = 0
 				end
-			-- используем €чейку base_price
-	--[[tostring(			if (current_price > base_price and current_price < base_price + order_interval) or
-					(current_price < base_price and current_price > base_price - order_interval) then
-					local base_price_not_used = true
-					for _, tab in pairs(trades_tbl) do
-						if tab["price"] == base_price then
-							base_price_not_used = false
-							break
-						end
-					end
-					if base_price_not_used and current_price > base_price then
-						SendTransBuySell(base_price, quantity, 'B')
-					elseif base_price_not_used and current_price < base_price then
-						SendTransBuySell(base_price, quantity, 'S')
-					end
-				end	]]
 			end
 		end
 	end
