@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.023
+version = 1.024
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -135,7 +135,6 @@ function OnInit()	-- событие - инициализация QUIK
 	t0950ko = true
 	t2350ko = true
 	stat_3 = false
-	warm_start_ord_ver_block = false
 	clearing_now = false
 	deviation_timer = false
 	deviation_count = 0
@@ -574,10 +573,9 @@ function WarmStart(c_price)
 		end
 		sleep(110)
 	end
-	if not ban_new_ord and not warm_start_ord_ver_block then
+	if not ban_new_ord then
 		OrdersVerification(base_price)
 	end
-	warm_start_ord_ver_block = false
 end
 
 function GapFilling(c_price_in)
@@ -601,7 +599,6 @@ function GapFilling(c_price_in)
 	PrintDbgStr(string.format("%s: Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s", script_name, tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 	file_log:write(string.format("%s Поиск гэпа c_price_in: %s s_greater: %s b_minor: %s\n", os.date(), tostring(c_price_in), tostring(s_greater), tostring(b_minor)))
 -- ищем и обрабатываем гэп
-	warm_start_ord_ver_block = false
 	if tonumber(s_greater) ~= 0 and tonumber(b_minor) == 1000000 then
 		if tonumber(c_price_in) >= tonumber(s_greater) + order_interval then
 			whole_part, fractional_part = math.modf((tonumber(c_price_in) - tonumber(s_greater))/order_interval)
@@ -679,10 +676,6 @@ function GapFilling(c_price_in)
 			if tonumber(c_price_in) > tonumber(s_greater) - order_interval and tonumber(c_price_in) < tonumber(s_greater) + order_interval then
 				base_price = tonumber(s_greater)
 				PrintDbgStr(string.format("%s: Задаём base_price при определении гэпа base_price = s_greater: %s", script_name, tostring(base_price)))
-			end
-			if tonumber(c_price_in) <= (tonumber(s_greater) - order_interval) and tonumber(c_price_in) >= (tonumber(s_greater) - order_interval * 11) then
-				warm_start_ord_ver_block = true
-				PrintDbgStr(string.format("%s: Текущая цена попала в диапазон twin'ов блокируем OrdersVerification при WarmStart %s", script_name, tostring(c_price_in)))
 			end
 		end
 	end
@@ -763,10 +756,6 @@ function GapFilling(c_price_in)
 			if tonumber(c_price_in) < tonumber(b_minor) + order_interval and tonumber(c_price_in) > tonumber(b_minor) - order_interval then
 				base_price = tonumber(b_minor)
 				PrintDbgStr(string.format("%s: Задаём base_price при определении гэпа base_price = b_minor: %s ", script_name, tostring(base_price)))
-			end
-			if tonumber(c_price_in) >= (tonumber(b_minor) + order_interval) and tonumber(c_price_in) <= (tonumber(b_minor) + order_interval * 11) then
-				warm_start_ord_ver_block = true
-				PrintDbgStr(string.format("%s: Текущая цена попала в диапазон twin'ов блокируем OrdersVerification при WarmStart %s", script_name, tostring(c_price_in)))
 			end
 		end
 	end
