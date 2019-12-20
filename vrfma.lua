@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.025
+version = 1.026
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -44,6 +44,7 @@ QUEUE_ONTRADE = {}
 	И: Вроде бы изредка возникает ситуация с ошибкой из за совместного обращения к таблице в обработчиках. Может какие то флаги поставить чтобы до выхода из обработки не было обращения?
 	В: При одновременном чтении ошибки маловероятны, а вот при удалении строк в незавершённых циклах могут быть проблемы с индексами.
 		Можно строки не удалять а помечать как аннулированные. А потом очищать централизовано в случае если не запущен ни один из обработчиков или функций
+22 !!! 2019_12_20  Не удалилась породившая twin заявка (не сработала функция: table.remove(trades_tbl, ind_2)). Введена проверка на корректность удаления
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -1055,6 +1056,28 @@ end
 							tostring(tab_2["number_sys"])))
 						table.sremove(trades_tbl, ind_2)		-- trades_tbl[ind_2] = nil
 						break
+					end
+				end
+				for _, tab_3 in pairs(trades_tbl) do
+					if order_number_sys_for_remove == tostring(tab_3["number_sys"]) then
+						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалилась продившая заявка заявка: twin tab[twin]: %s tab_3[number_sys]: %s", 
+							script_name,
+							order_number_sys_for_remove, 
+							tostring(tab_3["number_sys"])))
+						file_log:write(string.format("%s ОШИБКА!!! Не удалилась продившая заявка заявка: twin tab[twin]: %s tab_3[number_sys]: %s\n", 
+							os.date(), 
+							order_number_sys_for_remove, 
+							tostring(tab_3["number_sys"])))
+						ExitMess()
+					end
+					if twin_number_sys_for_remove == tostring(tab_3["number_sys"]) then
+						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалился twin tab[number_sys]: %s", 
+							script_name, 
+							twin_number_sys_for_remove))
+						file_log:write(string.format("%s ОШИБКА!!! Не удалился twin tab[number_sys]: %s\n", 
+							os.date(), 
+							twin_number_sys_for_remove))
+						ExitMess()
 					end
 				end
 				if tonumber(trade.price) > 0 and tonumber(base_price) > 0 then
