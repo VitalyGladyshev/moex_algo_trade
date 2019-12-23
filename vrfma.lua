@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.028
+version = 1.029
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -165,7 +165,7 @@ function OnInit()	-- событие - инициализация QUIK
 		file_log:write(string.format("%s Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
 	end
 	
-	free_TRANS_ID = os.time()	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
+	free_TRANS_ID = os.time() + math.random(1000000, 999000000)	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
 	current_price = 0
 	base_price = 0
 
