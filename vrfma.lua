@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.026
+version = 1.028
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -127,7 +127,7 @@ function OnInit()	-- событие - инициализация QUIK
 	if client ~= client_alt then
 		alt_client_use = true
 	end
-	prev_client_main = false
+	math.randomseed(os.time())
 	file_name_for_load = getScriptPath() .. "\\" .. dat_file_name
 	trade_period = false
 	CheckTradePeriod()
@@ -478,17 +478,30 @@ function OnParam(class, sec)
 	end
 end
 
+function GetAccAndClient()
+	if alt_client_use then
+		if math.random(0, 1) == 1 then -- PrintDbgStr(string.format("%s: math.random %s", script_name, tostring(tmp)))
+			return account, client
+		else
+			return account_alt, client_alt
+		end
+	else
+		return account, client
+	end
+end
+
 function ColdStart(counter, b_price)
 	PrintDbgStr(string.format("%s: ColdStart", script_name))
 	file_log:write(string.format("%s ColdStart\n", os.date()))
 	cold_start = false
+	local acc, cli
 	for cnt = 1, counter do
-		SendTransBuySell(b_price - order_interval * cnt, quantity, 'B')
-		sleep(110)
-	end
-	for cnt = 1, counter do
-		SendTransBuySell(b_price + order_interval * cnt, quantity, 'S')
-		sleep(110)
+		acc, cli = GetAccAndClient()
+		SendTransBuySell(b_price - order_interval * cnt, quantity, 'B', "0", acc, cli)
+		sleep(35)
+		acc, cli = GetAccAndClient()
+		SendTransBuySell(b_price + order_interval * cnt, quantity, 'S', "0", acc, cli)
+		sleep(35)
 	end	
 end
 
@@ -887,18 +900,8 @@ function OnStop(flag)	-- событие - остановка скрипта
 end
 
 function SendTransBuySell(price, quant, operation, twin_num, account_in, client_in, instr_name_in, instr_class_in, profit_in, write_to_table)	-- Отправка заявки на покупку/продажу
-	if alt_client_use and client_in == nil then
-		if prev_client_main then -- PrintDbgStr(string.format("%s: client_in %s", script_name, tostring(client_in)))	
-			client_in = client_alt
-			prev_client_main = false
-		else
-			client_in = client
-			prev_client_main = true
-		end
-	else
-		client_in = client_in or client
-	end
-	account_in = account_in or account
+	client_in = client_in or client
+	account_in = account_in or account	
 	instr_name_in = instr_name_in or instr_name
 	instr_class_in = instr_class_in or instr_class
 	twin_num = twin_num or "0"
@@ -1140,7 +1143,7 @@ function OrdersVerification(b_price)
 		end
 	end
 --Ставим новые заявки			
-	local pos_not_used
+	local pos_not_used, acc, cli
 	for cnt = 1, 10 do
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
@@ -1152,7 +1155,8 @@ function OrdersVerification(b_price)
 			end
 		end
 		if pos_not_used then
-			SendTransBuySell(b_price - order_interval * cnt, quantity, 'B')
+			acc, cli = GetAccAndClient()
+			SendTransBuySell(b_price - order_interval * cnt, quantity, 'B', "0", acc, cli)
 		end
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
@@ -1164,7 +1168,8 @@ function OrdersVerification(b_price)
 			end
 		end
 		if pos_not_used then
-			SendTransBuySell(b_price + order_interval * cnt, quantity, 'S')
+			acc, cli = GetAccAndClient()
+			SendTransBuySell(b_price + order_interval * cnt, quantity, 'S', "0", acc, cli)
 		end
 	end
 end
