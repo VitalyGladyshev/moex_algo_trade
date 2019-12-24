@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.029
+version = 1.030
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -165,7 +165,7 @@ function OnInit()	-- событие - инициализация QUIK
 		file_log:write(string.format("%s Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
 	end
 	
-	free_TRANS_ID = os.time() + math.random(1000000, 999000000)	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
+	free_TRANS_ID = os.time() + math.random(1000, 999000)	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
 	current_price = 0
 	base_price = 0
 
@@ -241,9 +241,9 @@ end
 function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr_class_in, instr_name_in, prev_instr_name_in, prev_instr_class_in)
 	PrintDbgStr(string.format("%s: KillAllOrdersAdapter Удаление всех заявок начато", script_name))
 	file_log:write(string.format("%s KillAllOrdersAdapter Удаление всех заявок начато\n", os.date()))
-	for _, tab in pairs(trades_tbl) do
-		if tostring(tab["status"]) == "2" then
-			SendTransClose(tab["number_sys"])
+	for ind_tb = #trades_tbl, 1, -1 do
+		if tostring(trades_tbl[ind_tb]["status"]) == "2" then
+			SendTransClose(trades_tbl[ind_tb]["number_sys"])
 			sleep(35)
 		end
 	end
@@ -989,6 +989,7 @@ function OnTransReply(trans_reply)	-- Подтверждение заявки
 		--PrintDbgStr(string.format("%s: 'for' trans_reply.trans_id: %s tab[number_my]: %s trans_reply.status: %s tab[quantity_current]: %s", script_name, tostring(trans_reply.trans_id), tostring(tab["number_my"]), tostring(trans_reply.status), tostring(tab["quantity_current"])))
 		if tostring(trans_reply.trans_id) == tostring(tab["number_my"]) then
 			if tostring(trans_reply.status) == "3" then
+				--PrintDbgStr(string.format("%s: OnTransReply совпадение", script_name))
 				tab["number_sys"] = trans_reply.order_num
 				tab["status"] = "2"				
 				table.sinsert(QUEUE_ONTRANSREPLY, {	trans_id = trans_reply.trans_id, 
@@ -1031,7 +1032,7 @@ function OnTrade(trade)	-- событие - QUIK получил сделку
 					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"])
 				end
 			else	--сработал twin. Удаляем заявку и twin
-for ind_n, tab_n in pairs(trades_tbl) do
+--[[for ind_n, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("%s: trades_tbl распечатываем до удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 										script_name,
 										tostring(tab_n["number_my"]), 
@@ -1046,7 +1047,7 @@ for ind_n, tab_n in pairs(trades_tbl) do
 										tostring(tab_n["instr_name"]),
 										tostring(tab_n["instr_class"]),
 										tostring(tab_n["profit"])))
-end
+end]]
 				local order_number_sys_for_remove = tostring(tab["twin"])		-- в поле twin номер породившей twin заявки
 				local twin_number_sys_for_remove = tostring(tab["number_sys"])	-- эта заявка - twin
 				table.sremove(trades_tbl, ind_1)				-- trades_tbl[ind_1] = nil
