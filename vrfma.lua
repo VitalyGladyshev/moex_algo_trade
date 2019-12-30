@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.032
+version = 1.033
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -198,9 +198,9 @@ function CheckTradePeriod()
 	else		
 		if trade_period then
 			trade_period = false
-			KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 			PrintDbgStr(string.format("%s: Неторговое время FORTS на ММВБ снимаем заявки. Время: %s", script_name, tostring(os.date())))
-			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.\n")
+			file_log:write(os.date() .. " Неторговое время FORTS на ММВБ снимаем заявки.\n")			
+			KillAllOrdersAdapter(client, client_alt, alt_client_use, instr_class, instr_name, prev_instr_name, prev_instr_class)
 		end
 	end
 	if tonumber(now_dt.hour) == 9 and tonumber(now_dt.min) >= 55 and t0950ko then
