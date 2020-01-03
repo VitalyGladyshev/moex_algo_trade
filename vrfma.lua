@@ -48,15 +48,22 @@ QUEUE_ONTRADE = {}
 23 Ошибки при удалении заявок
 24 V Писать в таблицу дату и время сделки
 25 Сделать обработку ошибок (в циклах с #)
-26 Проверять наличие папки logs и если её нет, то создавать
+26 V Проверять наличие папки logs и если её нет, то создавать
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
-	file_log = io.open(getScriptPath() .. "\\logs\\" .. os.date("%Y%m%d_%H%M%S") .. "_" .. log_file_name, "w")
 	PrintDbgStr(string.format("%s версия %05.3f: Событие - инициализация QUIK", script_name, version))
+	scr_path = getScriptPath()
+	log_dir_path = scr_path .. "\\logs\\"
+	local ok, err, code = os.rename(log_dir_path, log_dir_path)
+	if not ok then
+		os.execute("mkdir logs")
+		PrintDbgStr(string.format("%s создаём директорий logs", script_name))
+	end
+	file_log = io.open(log_dir_path .. os.date("%Y%m%d_%H%M%S") .. "_" .. log_file_name, "w")
 	file_log:write(string.format("%s %s версия %05.3f запущен (инициализация)\n", os.date(), script_name, version))
 	load_error = false
-	file_ini = io.open(getScriptPath() .. "\\" .. ini_file_name, "r")
+	file_ini = io.open(scr_path .. "\\" .. ini_file_name, "r")
 	if file_ini ~= nil then
 		account = file_ini:read("*l")
 		PrintDbgStr(script_name .. ": Чтение " .. ini_file_name .. ". Номер счёта: " .. account)
@@ -132,7 +139,7 @@ function OnInit()	-- событие - инициализация QUIK
 		alt_client_use = true
 	end
 	math.randomseed(os.time())
-	file_name_for_load = getScriptPath() .. "\\" .. dat_file_name
+	file_name_for_load = scr_path .. "\\" .. dat_file_name
 	trade_period = false
 	CheckTradePeriod()
 	start_deploying = true
