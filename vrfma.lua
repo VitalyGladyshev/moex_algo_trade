@@ -261,6 +261,7 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 	for ind_st_tb = #start_trades_tbl, 1, -1 do	-- ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
 		table.sremove(start_trades_tbl, ind_st_tb)
 	end
+	sleep(500)
 	stat_3 = false
 	for ind, tab_n in pairs(trades_tbl) do
 		PrintDbgStr(string.format("%s: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s datetime: %s", 
@@ -307,7 +308,6 @@ for ind, tab_n in pairs(start_trades_tbl) do
 								script_name, tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
 								tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
 end
-	sleep(500)
 	KillAllOrders(instr_class_in, instr_name_in, client_in)
 	if prev_instr_name_in ~= nil then
 		KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_in)
