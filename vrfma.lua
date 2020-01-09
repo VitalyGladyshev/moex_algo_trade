@@ -49,6 +49,7 @@ QUEUE_ONTRADE = {}
 24 V Писать в таблицу дату и время сделки
 25 Сделать обработку ошибок (в циклах с #)
 26 V Проверять наличие папки logs и если её нет, то создавать
+27 Вынести количество заявок в начало файла как параметр
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -261,7 +262,7 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 	for ind_st_tb = #start_trades_tbl, 1, -1 do	-- ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
 		table.sremove(start_trades_tbl, ind_st_tb)
 	end
-	sleep(500)
+	sleep(700)
 	stat_3 = false
 	for ind, tab_n in pairs(trades_tbl) do
 		PrintDbgStr(string.format("%s: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s datetime: %s", 
