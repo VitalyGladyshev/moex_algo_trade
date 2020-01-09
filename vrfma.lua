@@ -253,7 +253,7 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 	PrintDbgStr(string.format("%s: KillAllOrdersAdapter Удаление всех заявок начато", script_name))
 	file_log:write(string.format("%s KillAllOrdersAdapter Удаление всех заявок начато\n", os.date()))
 	for ind_tb = #trades_tbl, 1, -1 do
-		if tostring(trades_tbl[ind_tb]["status"]) == "2" then
+		if ind_tb > 0 and tostring(trades_tbl[ind_tb]["status"]) == "2" then
 			SendTransClose(trades_tbl[ind_tb]["number_sys"])
 			sleep(35)
 		end
