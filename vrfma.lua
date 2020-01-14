@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.034
+version = 1.038
 -- min_precision менять руками!!!!!
 min_precision = 0.01
 
@@ -8,6 +8,7 @@ script_name = "vrfma"
 log_file_name = "vrfma.log"
 ini_file_name = "vrfma.ini"
 dat_file_name = "trades_tbl.dat"
+order_number =  10
 
 -- добавлять суффиксы
 QUEUE_SENDTRANSBUYSELL = {}
@@ -45,11 +46,11 @@ QUEUE_ONTRADE = {}
 	В: При одновременном чтении ошибки маловероятны, а вот при удалении строк в незавершённых циклах могут быть проблемы с индексами.
 		Можно строки не удалять а помечать как аннулированные. А потом очищать централизовано в случае если не запущен ни один из обработчиков или функций
 22 !!! 2019_12_20  Не удалилась породившая twin заявка (не сработала функция: table.remove(trades_tbl, ind_2)). Введена проверка на корректность удаления
-23 Ошибки при удалении заявок
+23 V Ошибки при удалении заявок! Таблицы не обновляются до возвращения из обработчика!!!!!
 24 V Писать в таблицу дату и время сделки
-25 Сделать обработку ошибок (в циклах с #)
+25 v Сделать обработку исключений-ошибок (в циклах с #)
 26 V Проверять наличие папки logs и если её нет, то создавать
-27 Вынести количество заявок в начало файла как параметр
+27 V Вынести количество заявок в начало файла как параметр
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -253,16 +254,21 @@ end
 function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr_class_in, instr_name_in, prev_instr_name_in, prev_instr_class_in)
 	PrintDbgStr(string.format("%s: KillAllOrdersAdapter Удаление всех заявок начато", script_name))
 	file_log:write(string.format("%s KillAllOrdersAdapter Удаление всех заявок начато\n", os.date()))
-	for ind_tb = #trades_tbl, 1, -1 do
-		if ind_tb > 0 and tostring(trades_tbl[ind_tb]["status"]) == "2" then
-			SendTransClose(trades_tbl[ind_tb]["number_sys"])
-			sleep(35)
+
+	KillAllOrders(instr_class_in, instr_name_in, client_in)
+	if prev_instr_name_in ~= nil then
+		KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_in)
+	end
+	if alt_client_use_in then
+		KillAllOrders(instr_class_in, instr_name_in, client_alt_in)
+		if prev_instr_name_in ~= nil then
+			KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_alt_in)
 		end
 	end
+	
 	for ind_st_tb = #start_trades_tbl, 1, -1 do	-- ind_st_tb, tab_st_tb in pairs(start_trades_tbl) do		-- пересоздаём start_trades_tbl
 		table.sremove(start_trades_tbl, ind_st_tb)
 	end
-	sleep(1000)
 	stat_3 = false
 	for ind, tab_n in pairs(trades_tbl) do
 		PrintDbgStr(string.format("%s: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s datetime: %s", 
@@ -299,6 +305,7 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 												["datetime"]			= tab_n["datetime"]})
 		end
 	end
+
 for ind, tab_n in pairs(trades_tbl) do
 	PrintDbgStr(string.format("%s: распечатываем trades_tbl после удаления Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s", 
 									script_name, tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
@@ -309,16 +316,7 @@ for ind, tab_n in pairs(start_trades_tbl) do
 								script_name, tostring(tab_n["number_my"]), tostring(tab_n["number_sys"]), tostring(tab_n["status"]), tostring(tab_n["operation"]), tostring(tab_n["price"]), tostring(tab_n["twin"]),
 								tostring(tab_n["quantity_current"]), tostring(tab_n["account"]), tostring(tab_n["client"]), tostring(tab_n["instr_name"]), tostring(tab_n["instr_class"]), tostring(tab_n["profit"])))
 end
-	KillAllOrders(instr_class_in, instr_name_in, client_in)
-	if prev_instr_name_in ~= nil then
-		KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_in)
-	end
-	if alt_client_use_in then
-		KillAllOrders(instr_class_in, instr_name_in, client_alt_in)
-		if prev_instr_name_in ~= nil then
-			KillAllOrders(prev_instr_class_in, prev_instr_name_in, client_alt_in)
-		end
-	end
+
 	PrintDbgStr(string.format("%s: KillAllOrdersAdapter Удаление всех заявок завершено", script_name))
 	file_log:write(string.format("%s KillAllOrdersAdapter Удаление всех заявок завершено\n", os.date()))
 end
@@ -335,22 +333,7 @@ function KillAllOrders(classCode, secCode, brokerref)	-- Нашёл на форуме QUIK и 
 	local orders = SearchItems(ord, 0, getNumberOf(ord)-1, myFind, "class_code,sec_code,flags,brokerref")
 	if (orders ~= nil) and (#orders > 0) then
 		for i=1, #orders do
-			local transaction={
-				["TRANS_ID"]=tostring(free_TRANS_ID),	--1000*os.clock()),
-				["ACTION"]="KILL_ORDER",
-				["CLASSCODE"]=classCode,
-				["SECCODE"]=secCode,
-				["ORDER_KEY"]=tostring(getItem(ord,orders[i]).order_num)
-			}
-			local res = sendTransaction(transaction)
-			if res ~= "" then
-				PrintDbgStr(string.format("%s: Транзакция %s на снятие заявки %s не прошла проверку на стороне терминала QUIK [%s]", script_name, free_TRANS_ID, tostring(getItem(ord,orders[i]).order_num, res)))
-				file_log:write(string.format("	Транзакция %s на снятие заявки %s не прошла проверку на стороне терминала QUIK [%s]\n", free_TRANS_ID, tostring(getItem(ord,orders[i]).order_num, res)))
-			else
-				PrintDbgStr(string.format("%s: Транзакция %s отправлена. Снятие заявки: %s", script_name, free_TRANS_ID, tostring(getItem(ord,orders[i]).order_num)))
-				file_log:write(string.format("	Транзакция %s отправлена. Снятие заявки: %s\n", free_TRANS_ID, tostring(getItem(ord,orders[i]).order_num)))
-			end
-			free_TRANS_ID = free_TRANS_ID + 1	-- увеличиваем free_TRANS_ID
+			SendTransClose(tostring(getItem(ord,orders[i]).order_num), classCode, secCode)
 			sleep(35)
 		end
 	end
@@ -438,7 +421,7 @@ function OnParam(class, sec)
 					--Снимаем лишние заявки
 						for k, tab in pairs(trades_tbl) do
 							if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
-								SendTransClose(tab["number_sys"])
+								SendTransClose(tab["number_sys"], tab["instr_class"], tab["instr_name"])
 							end
 						end
 					end
@@ -449,7 +432,7 @@ function OnParam(class, sec)
 					if cold_start then
 						base_price = res.param_value
 						if not ban_new_ord then
-							ColdStart(10, base_price)	-- PrintDbgStr(string.format("%s: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", script_name, type(tmp), tonumber(tmp)))
+							ColdStart(order_number, base_price)	-- PrintDbgStr(string.format("%s: type(res.param_value): %s", type(res.param_value))) -- res.param_value: %.2f", script_name, type(tmp), tonumber(tmp)))
 						end
 						return
 					else
@@ -627,10 +610,10 @@ function GapFilling(c_price_in)
 										tostring(c_price_in), 
 										tostring(s_greater), 
 										tostring(whole_part)))
-			if tonumber(whole_part) > 12 then
-				whole_part = 12
-				PrintDbgStr(string.format("%s: Ограничение гэпа S whole_part: %s ограничиваем до 12", script_name, tostring(whole_part)))
-				file_log:write(string.format("%s Ограничение гэпа S whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+			if tonumber(whole_part) > (order_number + 2) then
+				whole_part = (order_number + 2)
+				PrintDbgStr(string.format("%s: Ограничение гэпа S whole_part: %s ограничиваем до %s", script_name, tostring(whole_part), tostring(order_number + 2)))
+				file_log:write(string.format("%s Ограничение гэпа S whole_part: %s ограничиваем до %s\n", os.date(), tostring(whole_part), tostring(order_number + 2)))
 			else
 				base_price = tonumber(s_greater) + order_interval * whole_part
 				PrintDbgStr(string.format("%s: Задаём base_price при определении гэпа base_price: %s c_price_in: %s s_greater: %s whole_part: %s fractional_part: %s", 
@@ -709,10 +692,10 @@ function GapFilling(c_price_in)
 										tostring(c_price_in), 
 										tostring(b_minor), 
 										tostring(whole_part)))
-			if tonumber(whole_part) > 12 then
-				whole_part = 12
-				PrintDbgStr(string.format("%s: Ограничение гэпа B whole_part: %s ограничиваем до 12", script_name, tostring(whole_part)))
-				file_log:write(string.format("%s Ограничение гэпа B whole_part: %s ограничиваем до 12\n", os.date(), tostring(whole_part)))
+			if tonumber(whole_part) > (order_number + 2) then
+				whole_part = (order_number + 2)
+				PrintDbgStr(string.format("%s: Ограничение гэпа B whole_part: %s ограничиваем до %s", script_name, tostring(whole_part), tostring(order_number + 2)))
+				file_log:write(string.format("%s Ограничение гэпа B whole_part: %s ограничиваем до %s\n", os.date(), tostring(whole_part), tostring(order_number + 2)))
 			else
 				base_price = tonumber(b_minor) - order_interval * whole_part
 				PrintDbgStr(string.format("%s: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
@@ -984,11 +967,11 @@ function SendTransBuySell(price, quant, operation, twin_num, account_in, client_
 	free_TRANS_ID = free_TRANS_ID + 1	--увеличиваем free_TRANS_ID
 end
 
-function SendTransClose(close_ID)		-- Снятие заявки 
+function SendTransClose(close_ID, close_instr_class, close_instr_name)		-- Снятие заявки 
 	local transaction = {}
 		transaction['TRANS_ID'] = tostring(free_TRANS_ID)
-		transaction['CLASSCODE'] = instr_class
-		transaction['SECCODE'] = instr_name
+		transaction['CLASSCODE'] = close_instr_class
+		transaction['SECCODE'] = close_instr_name
 		transaction['ACTION'] = 'KILL_ORDER'
 		transaction['ORDER_KEY'] = tostring(close_ID)		--['Заявка'] = tostring(close_ID)		["ORDER_KEY"]=tostring(getItem(ord,orders[i]).order_num)
 	local result = sendTransaction(transaction)
@@ -1149,11 +1132,11 @@ function OrdersVerification(b_price)
 		if tostring(tab["status"]) == "2" and tostring(tab["twin"]) == "0" then
 			if (tonumber(tab["price"]) > tonumber(b_price) and tostring(tab["operation"]) == 'B') 
 					or (tonumber(tab["price"]) < tonumber(b_price) and tostring(tab["operation"]) == 'S') then
-				SendTransClose(tab["number_sys"])
+				SendTransClose(tab["number_sys"], tab["instr_class"], tab["instr_name"])
 			end
-			if tonumber(tab["price"]) > tonumber(b_price) + order_interval * 10
-					or tonumber(tab["price"]) < tonumber(b_price) - order_interval * 10 then
-				SendTransClose(tab["number_sys"])
+			if tonumber(tab["price"]) > tonumber(b_price) + order_interval * order_number
+					or tonumber(tab["price"]) < tonumber(b_price) - order_interval * order_number then
+				SendTransClose(tab["number_sys"], tab["instr_class"], tab["instr_name"])
 			end
 		end
 		if tostring(tab["status"]) == "3" and tostring(tab["twin"]) == "0" then
@@ -1175,7 +1158,7 @@ function OrdersVerification(b_price)
 	end
 --Ставим новые заявки			
 	local pos_not_used, acc, cli
-	for cnt = 1, 10 do
+	for cnt = 1, order_number do
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
 			-- PrintDbgStr(string.format("%s: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", script_name, tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
@@ -1221,102 +1204,11 @@ function main()
 	trans_send_flag = false
 	local clearing_now_cnt = 0
 	while true do
-		while #QUEUE_SENDTRANSBUYSELL > 0 do
-			PrintDbgStr(string.format("%s: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s write_to_table: %s", 
-											script_name,
-											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].account),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].client),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].profit),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].write_to_table)))
-			file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s write_to_table: %s\n", 
-											os.date(), 
-											tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].price),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].account),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].client),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].profit),
-											tostring(QUEUE_SENDTRANSBUYSELL[1].write_to_table)))
-			table.sremove(QUEUE_SENDTRANSBUYSELL, 1)
-		end
-		while #QUEUE_SENDTRANSCLOSE > 0 do
-			PrintDbgStr(string.format("%s: Удаляем заявку SendTransClose: транзакция %s Снятие заявки: %s цена: %s", 
-											script_name,
-											tostring(QUEUE_SENDTRANSCLOSE[1].trans_id),
-											tostring(QUEUE_SENDTRANSCLOSE[1].close_id),
-											tostring(QUEUE_SENDTRANSCLOSE[1].price_snd)))
-			file_log:write(string.format("%s Удаляем заявку SendTransClose: транзакция %s Снятие заявки: %s цена: %s\n", 
-											os.date(), 
-											tostring(QUEUE_SENDTRANSCLOSE[1].trans_id),
-											tostring(QUEUE_SENDTRANSCLOSE[1].close_id),
-											tostring(QUEUE_SENDTRANSCLOSE[1].price_snd)))
-			table.sremove(QUEUE_SENDTRANSCLOSE, 1)
-		end
-		while #QUEUE_ONTRANSREPLY > 0 do	-- # оператор длины массива возвращает наибольший индекс элементов массива
-			PrintDbgStr(string.format("%s: Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]", 
-											script_name,
-											tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
-											QUEUE_ONTRANSREPLY[1].status, 
-											tostring(QUEUE_ONTRANSREPLY[1].order_num),
-											QUEUE_ONTRANSREPLY[1].quantity_current,
-											QUEUE_ONTRANSREPLY[1].account,
-											QUEUE_ONTRANSREPLY[1].client,
-											QUEUE_ONTRANSREPLY[1].instr_name,
-											QUEUE_ONTRANSREPLY[1].instr_class,
-											QUEUE_ONTRANSREPLY[1].result_msg))
-			file_log:write(string.format("%s Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]\n", 
-											os.date(), 
-											tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
-											QUEUE_ONTRANSREPLY[1].status, 
-											tostring(QUEUE_ONTRANSREPLY[1].order_num),
-											QUEUE_ONTRANSREPLY[1].quantity_current,
-											QUEUE_ONTRANSREPLY[1].account,
-											QUEUE_ONTRANSREPLY[1].client,
-											QUEUE_ONTRANSREPLY[1].instr_name,
-											QUEUE_ONTRANSREPLY[1].instr_class,
-											QUEUE_ONTRANSREPLY[1].result_msg))
-			trans_send_flag = true
-			table.sremove(QUEUE_ONTRANSREPLY, 1)
-		end
-		while #QUEUE_ONTRADE > 0 do
-			PrintDbgStr(string.format("%s: Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
-											script_name,
-											tostring(QUEUE_ONTRADE[1].order_num),
-											tostring(QUEUE_ONTRADE[1].price),
-											tostring(QUEUE_ONTRADE[1].operation),
-											tostring(QUEUE_ONTRADE[1].quantity_current),
-											tostring(QUEUE_ONTRADE[1].twin),
-											tostring(QUEUE_ONTRADE[1].account),
-											tostring(QUEUE_ONTRADE[1].client),
-											tostring(QUEUE_ONTRADE[1].instr_name),
-											tostring(QUEUE_ONTRADE[1].instr_class),
-											tostring(QUEUE_ONTRADE[1].profit)))
-			file_log:write(string.format("%s Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
-											os.date(), 
-											tostring(QUEUE_ONTRADE[1].order_num),
-											tostring(QUEUE_ONTRADE[1].price),
-											tostring(QUEUE_ONTRADE[1].operation),
-											tostring(QUEUE_ONTRADE[1].quantity_current),
-											tostring(QUEUE_ONTRADE[1].twin),
-											tostring(QUEUE_ONTRADE[1].account),
-											tostring(QUEUE_ONTRADE[1].client),
-											tostring(QUEUE_ONTRADE[1].instr_name),
-											tostring(QUEUE_ONTRADE[1].instr_class),
-											tostring(QUEUE_ONTRADE[1].profit)))
-			SaveTradesTbl()	-- сохраняем trades_tbl в файл
-			table.sremove(QUEUE_ONTRADE, 1)
-		end
+		xpcall(call_queue_sendtransbuysell, error_handler_queue_sendtransbuysell)
+		xpcall(call_queue_sendtransclose, error_handler_queue_sendtransclose)
+		xpcall(call_queue_ontransreply, error_handler_queue_ontransreply)
+		xpcall(call_queue_ontrade, error_handler_queue_ontrade)
+
 		CheckTradePeriod()
 		if tonumber(clearing_test_count) <= 0 then
 			clearing_test_count = 1200
@@ -1339,4 +1231,136 @@ function main()
 		sleep(50)
 	end
 	ExitMess()
+end
+
+function call_queue_sendtransbuysell()
+	while #QUEUE_SENDTRANSBUYSELL > 0 do
+		PrintDbgStr(string.format("%s: Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s write_to_table: %s", 
+										script_name,
+										tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].price),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].account),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].client),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].profit),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].write_to_table)))
+		file_log:write(string.format("%s Создаём заявку на сделку SendTransBuySell: транзакция %s цена: %s операция: %s количество: %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s write_to_table: %s\n", 
+										os.date(), 
+										tostring(QUEUE_SENDTRANSBUYSELL[1].trans_id),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].price),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].operation),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].quantity),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].twin),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].account),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].client),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].instr_name),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].instr_class),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].profit),
+										tostring(QUEUE_SENDTRANSBUYSELL[1].write_to_table)))
+		table.sremove(QUEUE_SENDTRANSBUYSELL, 1)
+	end
+end
+
+function error_handler_queue_sendtransbuysell(err)
+	PrintDbgStr(string.format("%s ERROR in: call_queue_sendtransbuysell: %s", script_name, err))
+	file_log:write(string.format("%s ERROR in: call_queue_sendtransbuysell: %s\n", script_name, err))
+	message(string.format("%s ERROR in: call_queue_sendtransbuysell: %s", script_name, err))
+end
+
+function call_queue_sendtransclose()
+	while #QUEUE_SENDTRANSCLOSE > 0 do
+		PrintDbgStr(string.format("%s: Удаляем заявку SendTransClose: транзакция %s Снятие заявки: %s цена: %s", 
+										script_name,
+										tostring(QUEUE_SENDTRANSCLOSE[1].trans_id),
+										tostring(QUEUE_SENDTRANSCLOSE[1].close_id),
+										tostring(QUEUE_SENDTRANSCLOSE[1].price_snd)))
+		file_log:write(string.format("%s Удаляем заявку SendTransClose: транзакция %s Снятие заявки: %s цена: %s\n", 
+										os.date(), 
+										tostring(QUEUE_SENDTRANSCLOSE[1].trans_id),
+										tostring(QUEUE_SENDTRANSCLOSE[1].close_id),
+										tostring(QUEUE_SENDTRANSCLOSE[1].price_snd)))
+		table.sremove(QUEUE_SENDTRANSCLOSE, 1)
+	end
+end
+
+function error_handler_queue_sendtransclose(err)
+	PrintDbgStr(string.format("%s ERROR in: call_queue_sendtransclose: %s", script_name, err))
+	file_log:write(string.format("%s ERROR in: call_queue_sendtransclose: %s\n", script_name, err))
+	message(string.format("%s ERROR in: call_queue_sendtransclose: %s", script_name, err))
+end
+
+function call_queue_ontransreply()
+	while #QUEUE_ONTRANSREPLY > 0 do	-- # оператор длины массива возвращает наибольший индекс элементов массива
+		PrintDbgStr(string.format("%s: Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]", 
+										script_name,
+										tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
+										QUEUE_ONTRANSREPLY[1].status, 
+										tostring(QUEUE_ONTRANSREPLY[1].order_num),
+										QUEUE_ONTRANSREPLY[1].quantity_current,
+										QUEUE_ONTRANSREPLY[1].account,
+										QUEUE_ONTRANSREPLY[1].client,
+										QUEUE_ONTRANSREPLY[1].instr_name,
+										QUEUE_ONTRANSREPLY[1].instr_class,
+										QUEUE_ONTRANSREPLY[1].result_msg))
+		file_log:write(string.format("%s Получен ответ OnTransReply на транзакцию %s Статус - %i order_num - %s количество - %i  account: %s client: %s instr_name: %s instr_class: %s msg:[%s]\n", 
+										os.date(), 
+										tostring(QUEUE_ONTRANSREPLY[1].trans_id), 
+										QUEUE_ONTRANSREPLY[1].status, 
+										tostring(QUEUE_ONTRANSREPLY[1].order_num),
+										QUEUE_ONTRANSREPLY[1].quantity_current,
+										QUEUE_ONTRANSREPLY[1].account,
+										QUEUE_ONTRANSREPLY[1].client,
+										QUEUE_ONTRANSREPLY[1].instr_name,
+										QUEUE_ONTRANSREPLY[1].instr_class,
+										QUEUE_ONTRANSREPLY[1].result_msg))
+		trans_send_flag = true
+		table.sremove(QUEUE_ONTRANSREPLY, 1)
+	end
+end
+
+function error_handler_queue_ontransreply(err)
+	PrintDbgStr(string.format("%s ERROR in: call_queue_ontransreply: %s", script_name, err))
+	file_log:write(string.format("%s ERROR in: call_queue_ontransreply: %s\n", script_name, err))
+	message(string.format("%s ERROR in: call_queue_ontransreply: %s", script_name, err))
+end
+
+function call_queue_ontrade()
+	while #QUEUE_ONTRADE > 0 do
+		PrintDbgStr(string.format("%s: Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+										script_name,
+										tostring(QUEUE_ONTRADE[1].order_num),
+										tostring(QUEUE_ONTRADE[1].price),
+										tostring(QUEUE_ONTRADE[1].operation),
+										tostring(QUEUE_ONTRADE[1].quantity_current),
+										tostring(QUEUE_ONTRADE[1].twin),
+										tostring(QUEUE_ONTRADE[1].account),
+										tostring(QUEUE_ONTRADE[1].client),
+										tostring(QUEUE_ONTRADE[1].instr_name),
+										tostring(QUEUE_ONTRADE[1].instr_class),
+										tostring(QUEUE_ONTRADE[1].profit)))
+		file_log:write(string.format("%s Сделка OnTrade order_num: %s цена: %s операция: %s количество - %s twin: %s account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+										os.date(), 
+										tostring(QUEUE_ONTRADE[1].order_num),
+										tostring(QUEUE_ONTRADE[1].price),
+										tostring(QUEUE_ONTRADE[1].operation),
+										tostring(QUEUE_ONTRADE[1].quantity_current),
+										tostring(QUEUE_ONTRADE[1].twin),
+										tostring(QUEUE_ONTRADE[1].account),
+										tostring(QUEUE_ONTRADE[1].client),
+										tostring(QUEUE_ONTRADE[1].instr_name),
+										tostring(QUEUE_ONTRADE[1].instr_class),
+										tostring(QUEUE_ONTRADE[1].profit)))
+		SaveTradesTbl()	-- сохраняем trades_tbl в файл
+		table.sremove(QUEUE_ONTRADE, 1)
+	end
+end
+
+function error_handler_queue_ontrade(err)
+	PrintDbgStr(string.format("%s ERROR in: call_queue_ontrade: %s", script_name, err))
+	file_log:write(string.format("%s ERROR in: call_queue_ontrade: %s\n", script_name, err))
+	message(string.format("%s ERROR in: call_queue_ontrade: %s", script_name, err))
 end
