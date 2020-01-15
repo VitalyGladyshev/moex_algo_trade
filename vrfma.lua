@@ -1,6 +1,6 @@
 -- vrfma
-version = 1.038
--- min_precision менять руками!!!!!
+version = 1.039
+-- min_precision менять руками!!!
 min_precision = 0.01
 
 -- модифицируемые параметры
@@ -8,7 +8,9 @@ script_name = "vrfma"
 log_file_name = "vrfma.log"
 ini_file_name = "vrfma.ini"
 dat_file_name = "trades_tbl.dat"
-order_number =  10
+order_number = 10
+delete_only_oun_orders = false
+
 
 -- добавлять суффиксы
 QUEUE_SENDTRANSBUYSELL = {}
@@ -324,22 +326,31 @@ end
 function KillAllOrders(classCode, secCode, brokerref)	-- Нашёл на форуме QUIK и адаптировал
 	PrintDbgStr(string.format("%s: KillAllOrders Удаление всех заявок начато", script_name))
 	file_log:write(string.format("%s KillAllOrders Удаление всех заявок начато\n", os.date()))
+
 	function myFind(C,S,F, BR)
 		return (C == classCode) and (S == secCode) and (bit.band(F, 0x1) ~= 0) and (BR == brokerref)
 	end
-	local res = 1
-	local errNotExist = true
+
 	local ord = "orders"
 	local orders = SearchItems(ord, 0, getNumberOf(ord)-1, myFind, "class_code,sec_code,flags,brokerref")
 	if (orders ~= nil) and (#orders > 0) then
 		for i=1, #orders do
-			SendTransClose(tostring(getItem(ord,orders[i]).order_num), classCode, secCode)
+			if delete_only_oun_orders then
+				for _, tab in pairs(trades_tbl) do
+					if tostring(tab["number_sys"]) == tostring(getItem(ord,orders[i]).order_num) then
+						SendTransClose(tostring(getItem(ord,orders[i]).order_num), classCode, secCode)
+						break
+					end
+				end
+			else
+				SendTransClose(tostring(getItem(ord,orders[i]).order_num), classCode, secCode)
+			end
 			sleep(35)
 		end
 	end
 	PrintDbgStr(string.format("%s: KillAllOrders Удаление всех заявок завершено", script_name))
 	file_log:write(string.format("%s KillAllOrders Удаление всех заявок завершено\n", os.date()))
-	return errNotExist 
+	return
 end
 
 function ClearingTest()
