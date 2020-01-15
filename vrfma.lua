@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.039
+version = 1.040
 -- min_precision менять руками!!!
 min_precision = 0.01
 
@@ -49,9 +49,9 @@ QUEUE_ONTRADE = {}
 22 !!! 2019_12_20  Не удалилась породившая twin заявка (не сработала функция: table.remove(trades_tbl, ind_2)). Введена проверка на корректность удаления
 23 V Ошибки при удалении заявок! Таблицы не обновляются до возвращения из обработчика!!!!!
 24 V Писать в таблицу дату и время сделки
-25 v Сделать обработку исключений-ошибок (в циклах с #)
-26 V Проверять наличие папки logs и если её нет, то создавать
-27 V Вынести количество заявок в начало файла как параметр
+25 v Сделать обработку исключений-ошибок (в циклах с #)			-- идея: сбор статистики перегибов и эмпирический подсчёт оптимального order_interval на основе последовательности тиков (посчитать количество от величины: комиссия+1)
+26 V Проверять наличие папки logs и если её нет, то создавать	-- идея: анализ разных фьючерсов и поиск оптимального order_interval для перспективных (т.е. ликвидных)
+27 V Вынести количество заявок в начало файла как параметр		-- "идея": попробовать нейросеть из книги
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -170,13 +170,15 @@ function OnInit()	-- событие - инициализация QUIK
 	if not cold_start then
 		dofile(file_name_for_load)
 		stat_3 = true
-	end
--- !!! Заменить конструкцию trades_tbl[1][
-	if not cold_start and trades_tbl[1]["instr_name"] ~= instr_name then
-		prev_instr_name = trades_tbl[1]["instr_name"]
-		prev_instr_class = trades_tbl[1]["instr_class"]
-		PrintDbgStr(string.format("%s: Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s", script_name, instr_name, prev_instr_name))
-		file_log:write(string.format("%s Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
+		for _, tab in pairs(trades_tbl) do
+			if tab["instr_name"] ~= instr_name then
+				prev_instr_name = tab["instr_name"]
+				prev_instr_class = tab["instr_class"]
+				PrintDbgStr(string.format("%s: Обнаружена замена инструмента. Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s", script_name, instr_name, prev_instr_name))
+				file_log:write(string.format("%s Обнаружена замена инструмента. Новый инструмент instr_name: %s предыдущий инструмент prev_instr_name: %s\n", os.date(), instr_name, prev_instr_name))
+				break
+			end
+		end
 	end
 	
 	free_TRANS_ID = os.time() + math.random(1000, 999000)	--для поддержания уникальности free_TRANS_ID задаем первый номер транзакции текущим временем системы
@@ -446,17 +448,14 @@ function OnParam(class, sec)
 						end
 						return
 					else
-						if prev_instr_name == nil then
-							for _, tab in pairs(trades_tbl) do
+						base_price = current_price
+						for _, tab in pairs(trades_tbl) do
+							if tab["instr_name"] == instr_name then
 								base_price = NewBasePrice(tonumber(tab["price"]), current_price)
+								PrintDbgStr(string.format("%s: Определение base_price: %.2f", script_name, base_price))
+								file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
 								break
 							end
-							PrintDbgStr(string.format("%s: Определение base_price: %.2f", script_name, base_price))
-							file_log:write(string.format("%s Определение base_price: %.2f\n", os.date(), base_price))
-						else
-							base_price = current_price
-							PrintDbgStr(string.format("%s: Новый инструмент base_price = current_price: %.2f", script_name, base_price))
-							file_log:write(string.format("%s Новый инструмент base_price = current_price: %.2f\n", os.date(), base_price))
 						end
 						WarmStart(current_price)
 						return
@@ -1029,11 +1028,23 @@ end
 
 function OnTrade(trade)	-- событие - QUIK получил сделку
 	PrintDbgStr(string.format("%s: OnTrade trade.order_num: %s price: %s", script_name, tostring(trade.order_num), trade.price))
+	local saved_instr_name
 	for ind_1, tab in pairs(trades_tbl) do
 		-- PrintDbgStr(string.format("%s: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tab[quantity_current]: %s", script_name, tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["quantity_current"])))
 		if tostring(tab["number_sys"]) == tostring(trade.order_num) and tostring(tab["status"]) ~= "3" then
+			table.sinsert(QUEUE_ONTRADE, {	order_num = trade.order_num,		-- нельзя перенести в конец цикла (при обработке twin удаляется строка таблицы)
+											price = trade.price,
+											operation = tab["operation"],
+											quantity_current = trade.qty,
+											twin = tab["twin"],
+											account = tab["account"],
+											client = tab["client"],
+											instr_name = tab["instr_name"],
+											instr_class = tab["instr_class"],
+											profit = tab["profit"] })
+			saved_instr_name = tab["instr_name"]
 			if tostring(tab["twin"]) == "0" then
-			-- У twin при стартовой расствновке может быть цена не из сетки. Изменять base_price надо если не twin
+			-- У twin при стартовой расстановке может быть цена не из сетки. Изменять base_price надо если не twin
 				base_price = tab["price"]	-- !!! Именно так, а не trade.price. На границе сессии бывает удовлетворение по цене не указанной в заявке!!!
 				tab["status"] = "3"
 				tab["datetime"] = os.date()
@@ -1096,7 +1107,7 @@ end
 						ExitMess()
 					end
 				end
-				if tonumber(trade.price) > 0 and tonumber(base_price) > 0 then
+				if tonumber(trade.price) > 0 and tonumber(base_price) > 0 and saved_instr_name == instr_name then
 					base_price = NewBasePrice(base_price, tonumber(trade.price))
 				end
 for ind_n, tab_n in pairs(trades_tbl) do
@@ -1117,17 +1128,7 @@ for ind_n, tab_n in pairs(trades_tbl) do
 										tostring(tab_n["datetime"])))
 end
 			end
-			table.sinsert(QUEUE_ONTRADE, {	order_num = trade.order_num,
-											price = trade.price,
-											operation = tab["operation"],
-											quantity_current = trade.qty,
-											twin = tab["twin"],
-											account = tab["account"],
-											client = tab["client"],
-											instr_name = tab["instr_name"],
-											instr_class = tab["instr_class"],
-											profit = tab["profit"] })
-			if not ban_new_ord then
+			if not ban_new_ord and saved_instr_name == instr_name then
 				OrdersVerification(base_price)
 			end
 			break
@@ -1172,7 +1173,7 @@ function OrdersVerification(b_price)
 		pos_not_used = true
 		for k2, tab in pairs(trades_tbl) do
 			-- PrintDbgStr(string.format("%s: OrdersVerification. B. tab[price]: %s (b_price - order_interval * cnt): %s res: %s", script_name, tostring(tab["price"]), tostring(b_price - order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price - order_interval * cnt))))			
-			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) and tostring(tab["status"]) ~= "3" then	-- tostring(tab["twin"]) == "0" then
+			if tostring(tab["price"]) == tostring(b_price - order_interval * cnt) and tostring(tab["status"]) ~= "3" and tab["instr_name"] == instr_name then	-- tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("%s: OrdersVerification. B. pos_not_used = false цена: %s", script_name, tostring(b_price - order_interval * cnt)))
 				break
@@ -1185,7 +1186,7 @@ function OrdersVerification(b_price)
 		pos_not_used = true
 		for k3, tab in pairs(trades_tbl) do
 			-- PrintDbgStr(string.format("%s: OrdersVerification. S. tab[price]: %s (b_price + order_interval * cnt): %s res: %s", script_name, tostring(tab["price"]), tostring(b_price + order_interval * cnt), tostring(tostring(tab["price"]) == tostring(b_price + order_interval * cnt))))
-			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) and tostring(tab["status"]) ~= "3" then	-- tostring(tab["twin"]) == "0" then
+			if tostring(tab["price"]) == tostring(b_price + order_interval * cnt) and tostring(tab["status"]) ~= "3" and tab["instr_name"] == instr_name then	-- tostring(tab["twin"]) == "0" then
 				pos_not_used = false
 				PrintDbgStr(string.format("%s: OrdersVerification. S. pos_not_used = false цена: %s", script_name, tostring(b_price + order_interval * cnt)))
 				break
