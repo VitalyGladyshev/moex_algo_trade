@@ -11,7 +11,6 @@ dat_file_name = "trades_tbl.dat"
 order_number = 10
 delete_only_oun_orders = false
 
-
 -- добавлять суффиксы
 QUEUE_SENDTRANSBUYSELL = {}
 QUEUE_SENDTRANSCLOSE = {}
