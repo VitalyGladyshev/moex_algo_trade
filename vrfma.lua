@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.040
+version = 1.043
 -- min_precision менять руками!!!
 min_precision = 0.01
 
@@ -17,7 +17,7 @@ QUEUE_SENDTRANSCLOSE = {}
 QUEUE_ONTRANSREPLY = {}
 QUEUE_ONTRADE = {}
 
---[[
+--[[	Проверять!!! по ДВА!!! дня новые версии не Мечеле!!!
 1 V Перенести записи в лог файл из обработчиков в main
 2 После отладки уменьшить вывод отладочных сообщений
 3 V Сделать снятие заявок в полночь и запуск торговли после 10:01
@@ -47,11 +47,13 @@ QUEUE_ONTRADE = {}
 	В: При одновременном чтении ошибки маловероятны, а вот при удалении строк в незавершённых циклах могут быть проблемы с индексами.
 		Можно строки не удалять а помечать как аннулированные. А потом очищать централизовано в случае если не запущен ни один из обработчиков или функций
 22 !!! 2019_12_20  Не удалилась породившая twin заявка (не сработала функция: table.remove(trades_tbl, ind_2)). Введена проверка на корректность удаления
-23 V Ошибки при удалении заявок! Таблицы не обновляются до возвращения из обработчика!!!!!
+23 v Ошибки при удалении заявок! Таблицы не обновляются до возвращения из обработчика!!!!!
 24 V Писать в таблицу дату и время сделки
 25 v Сделать обработку исключений-ошибок (в циклах с #)			-- идея: сбор статистики перегибов и эмпирический подсчёт оптимального order_interval на основе последовательности тиков (посчитать количество от величины: комиссия+1)
 26 V Проверять наличие папки logs и если её нет, то создавать	-- идея: анализ разных фьючерсов и поиск оптимального order_interval для перспективных (т.е. ликвидных)
 27 V Вынести количество заявок в начало файла как параметр		-- "идея": попробовать нейросеть из книги
+28 Проблема с ложным клирингом. Сделать блокировку и по времени!
+29 v При не удалении породившей twin заявки восстановление twin высаживает весь депозит
 ]]
 
 function OnInit()	-- событие - инициализация QUIK
@@ -273,39 +275,39 @@ function KillAllOrdersAdapter(client_in, client_alt_in, alt_client_use_in, instr
 		table.sremove(start_trades_tbl, ind_st_tb)
 	end
 	stat_3 = false
-	for ind, tab_n in pairs(trades_tbl) do
+	for ind_tb = #trades_tbl, 1, -1 do	-- for ind, tab_n in pairs(trades_tbl) do
 		PrintDbgStr(string.format("%s: распечатываем trades_tbl и удаляем заявки со статусом не равным 3 Номер мой: %s Номер системы: %s Статус: %s Операция: %s Цена: %s twin: %s кол-во: %s account: %s client: %s instr_name: %s instr_class: %s datetime: %s", 
 											script_name,
-											tostring(tab_n["number_my"]), 
-											tostring(tab_n["number_sys"]), 
-											tostring(tab_n["status"]), 
-											tostring(tab_n["operation"]), 
-											tostring(tab_n["price"]), 
-											tostring(tab_n["twin"]),
-											tostring(tab_n["quantity_current"]),
-											tostring(tab_n["account"]),
-											tostring(tab_n["client"]),
-											tostring(tab_n["instr_name"]),
-											tostring(tab_n["instr_class"]),
-											tostring(tab_n["profit"]),
-											tostring(tab_n["datetime"])))
-		if tostring(tab_n["status"]) ~= "3" then
-			trades_tbl[ind] = nil
+											tostring(trades_tbl[ind_tb]["number_my"]), 
+											tostring(trades_tbl[ind_tb]["number_sys"]), 
+											tostring(trades_tbl[ind_tb]["status"]), 
+											tostring(trades_tbl[ind_tb]["operation"]), 
+											tostring(trades_tbl[ind_tb]["price"]), 
+											tostring(trades_tbl[ind_tb]["twin"]),
+											tostring(trades_tbl[ind_tb]["quantity_current"]),
+											tostring(trades_tbl[ind_tb]["account"]),
+											tostring(trades_tbl[ind_tb]["client"]),
+											tostring(trades_tbl[ind_tb]["instr_name"]),
+											tostring(trades_tbl[ind_tb]["instr_class"]),
+											tostring(trades_tbl[ind_tb]["profit"]),
+											tostring(trades_tbl[ind_tb]["datetime"])))
+		if tostring(trades_tbl[ind_tb]["status"]) ~= "3" then
+			SendTransClose(trades_tbl[ind_tb]["number_sys"], trades_tbl[ind_tb]["instr_class"], trades_tbl[ind_tb]["instr_name"])	--trades_tbl[ind] = nil
 		else
 			stat_3 = true
-			table.sinsert(start_trades_tbl, {	["number_my"]			= tab_n["number_my"], 
-												["number_sys"]			= tab_n["number_sys"], 
-												["price"]				= tab_n["price"], 
-												["operation"]			= tab_n["operation"], 
-												["status"]				= tab_n["status"], 
-												["twin"] 				= tab_n["twin"],
-												["quantity_current"]	= tab_n["quantity_current"],
-												["account"]				= tab_n["account"],
-												["client"]				= tab_n["client"],
-												["instr_name"]			= tab_n["instr_name"],
-												["instr_class"]			= tab_n["instr_class"],
-												["profit"]				= tab_n["profit"],
-												["datetime"]			= tab_n["datetime"]})
+			table.sinsert(start_trades_tbl, {	["number_my"]			= trades_tbl[ind_tb]["number_my"], 
+												["number_sys"]			= trades_tbl[ind_tb]["number_sys"], 
+												["price"]				= trades_tbl[ind_tb]["price"], 
+												["operation"]			= trades_tbl[ind_tb]["operation"], 
+												["status"]				= trades_tbl[ind_tb]["status"], 
+												["twin"] 				= trades_tbl[ind_tb]["twin"],
+												["quantity_current"]	= trades_tbl[ind_tb]["quantity_current"],
+												["account"]				= trades_tbl[ind_tb]["account"],
+												["client"]				= trades_tbl[ind_tb]["client"],
+												["instr_name"]			= trades_tbl[ind_tb]["instr_name"],
+												["instr_class"]			= trades_tbl[ind_tb]["instr_class"],
+												["profit"]				= trades_tbl[ind_tb]["profit"],
+												["datetime"]			= trades_tbl[ind_tb]["datetime"]})
 		end
 	end
 
@@ -710,7 +712,7 @@ function GapFilling(c_price_in)
 				PrintDbgStr(string.format("%s: Задаём base_price при определении гэпа base_price: %s c_price_in: %s b_minor: %s whole_part: %s fractional_part: %s", 
 											script_name, tostring(base_price), tostring(c_price_in), tostring(b_minor), tostring(whole_part), tostring(fractional_part)))
 			end
-			SendTransBuySell(c_price_in + tonumber(min_precision), whole_part * quantity, 'B', "0", s_account, s_client, instr_name, instr_class, profit, false)
+			SendTransBuySell(c_price_in + tonumber(min_precision), whole_part * quantity, 'B', "0", b_account, b_client, instr_name, instr_class, profit, false)
 			for cnt = 1, whole_part do
 				table.sinsert(trades_tbl, {	["number_my"] = free_TRANS_ID, 
 											["number_sys"] = free_TRANS_ID, 
@@ -719,8 +721,8 @@ function GapFilling(c_price_in)
 											["status"] = "3", 
 											["twin"] = "0",
 											["quantity_current"] = quantity,
-											["account"] = s_account,
-											["client"] = s_client,
+											["account"] = b_account,
+											["client"] = b_client,
 											["instr_name"] = instr_name,
 											["instr_class"] = instr_class,
 											["profit"] = profit,
@@ -732,29 +734,29 @@ function GapFilling(c_price_in)
 													["status"] = "3", 
 													["twin"] = "0",
 													["quantity_current"] = quantity,
-													["account"] = s_account,
-													["client"] = s_client,
+													["account"] = b_account,
+													["client"] = b_client,
 													["instr_name"] = instr_name,
 													["instr_class"] = instr_class,
 													["profit"] = profit,
 													["datetime"] = os.date()})
-				PrintDbgStr(string.format("%s: Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
+				PrintDbgStr(string.format("%s: Вписали запись: транзакция %s цена: %s операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s", 
 												script_name,
 												tostring(free_TRANS_ID),
-												tonumber(b_minor) - order_interval * cnt,
+												tostring(tonumber(b_minor) - order_interval * cnt),
 												tostring(quantity),
-												tostring(s_account),
-												tostring(s_client),
+												tostring(b_account),
+												tostring(b_client),
 												tostring(instr_name),
 												tostring(instr_class),
 												tostring(profit)))
-				file_log:write(string.format("%s Вписали запись: транзакция %s цена: %i операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
+				file_log:write(string.format("%s Вписали запись: транзакция %s цена: %s операция: B количество: %s статус: 3 twin: 0 account: %s client: %s instr_name: %s instr_class: %s profit: %s\n", 
 												os.date(), 
 												tostring(free_TRANS_ID),
-												tonumber(b_minor) - order_interval * cnt,
+												tostring(tonumber(b_minor) - order_interval * cnt),
 												tostring(quantity),
-												tostring(s_account),
-												tostring(s_client),
+												tostring(b_account),
+												tostring(b_client),
 												tostring(instr_name),
 												tostring(instr_class),
 												tostring(profit)))
@@ -1028,21 +1030,24 @@ end
 
 function OnTrade(trade)	-- событие - QUIK получил сделку
 	PrintDbgStr(string.format("%s: OnTrade trade.order_num: %s price: %s", script_name, tostring(trade.order_num), trade.price))
+	local twin_number_sys_for_remove
+	local saved_operation
+	local saved_twin
+	local saved_account
+	local saved_client
 	local saved_instr_name
+	local saved_instr_class
+	local saved_profit
 	for ind_1, tab in pairs(trades_tbl) do
 		-- PrintDbgStr(string.format("%s: 'for' trade.order_num: %s tab[number_sys]: %s tab[status]: %s tab[quantity_current]: %s", script_name, tostring(trade.order_num), tostring(tab["number_sys"]), tostring(tab["status"]), tostring(tab["quantity_current"])))
 		if tostring(tab["number_sys"]) == tostring(trade.order_num) and tostring(tab["status"]) ~= "3" then
-			table.sinsert(QUEUE_ONTRADE, {	order_num = trade.order_num,		-- нельзя перенести в конец цикла (при обработке twin удаляется строка таблицы)
-											price = trade.price,
-											operation = tab["operation"],
-											quantity_current = trade.qty,
-											twin = tab["twin"],
-											account = tab["account"],
-											client = tab["client"],
-											instr_name = tab["instr_name"],
-											instr_class = tab["instr_class"],
-											profit = tab["profit"] })
+			saved_operation = tab["operation"]		-- сохраняем т.к. при обработке twin удаляется строка таблицы
+			saved_twin = tab["twin"]		-- в поле twin номер породившей twin заявки
+			saved_account = tab["account"]
+			saved_client = tab["client"]
 			saved_instr_name = tab["instr_name"]
+			saved_instr_class = tab["instr_class"]
+			saved_profit = tab["profit"]
 			if tostring(tab["twin"]) == "0" then
 			-- У twin при стартовой расстановке может быть цена не из сетки. Изменять base_price надо если не twin
 				base_price = tab["price"]	-- !!! Именно так, а не trade.price. На границе сессии бывает удовлетворение по цене не указанной в заявке!!!
@@ -1071,37 +1076,36 @@ for ind_n, tab_n in pairs(trades_tbl) do
 										tostring(tab_n["profit"]),
 										tostring(tab_n["datetime"])))
 end
-				local order_number_sys_for_remove = tostring(tab["twin"])		-- в поле twin номер породившей twin заявки
-				local twin_number_sys_for_remove = tostring(tab["number_sys"])	-- эта заявка - twin
+				twin_number_sys_for_remove = tostring(tab["number_sys"])	-- эта заявка - twin
 				table.sremove(trades_tbl, ind_1)				-- trades_tbl[ind_1] = nil
 				for ind_2, tab_2 in pairs(trades_tbl) do
-					if order_number_sys_for_remove == tostring(tab_2["number_sys"]) then
-						PrintDbgStr(string.format("%s: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin tab[twin]: %s tab_2[number_sys]: %s", 
+					if tostring(saved_twin) == tostring(tab_2["number_sys"]) then
+						PrintDbgStr(string.format("%s: Сработал twin. Удаляем заявку tab[number_sys]: %s и twin saved_twin: %s tab_2[number_sys]: %s", 
 							script_name,
 							twin_number_sys_for_remove, 
-							order_number_sys_for_remove, 
+							saved_twin, 
 							tostring(tab_2["number_sys"])))
 						table.sremove(trades_tbl, ind_2)		-- trades_tbl[ind_2] = nil
 						break
 					end
 				end
 				for _, tab_3 in pairs(trades_tbl) do
-					if order_number_sys_for_remove == tostring(tab_3["number_sys"]) then
-						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалилась продившая заявка заявка: twin tab[twin]: %s tab_3[number_sys]: %s", 
+					if tostring(saved_twin) == tostring(tab_3["number_sys"]) then
+						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалилась продившая заявка заявка: twin saved_twin: %s tab_3[number_sys]: %s", 
 							script_name,
-							order_number_sys_for_remove, 
+							saved_twin, 
 							tostring(tab_3["number_sys"])))
-						file_log:write(string.format("%s ОШИБКА!!! Не удалилась продившая заявка заявка: twin tab[twin]: %s tab_3[number_sys]: %s\n", 
+						file_log:write(string.format("%s ОШИБКА!!! Не удалилась продившая заявка заявка: twin saved_twin: %s tab_3[number_sys]: %s\n", 
 							os.date(), 
-							order_number_sys_for_remove, 
+							saved_twin, 
 							tostring(tab_3["number_sys"])))
 						ExitMess()
 					end
 					if twin_number_sys_for_remove == tostring(tab_3["number_sys"]) then
-						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалился twin tab[number_sys]: %s", 
+						PrintDbgStr(string.format("%s: ОШИБКА!!! Не удалился twin twin_number_sys_for_remove: %s", 
 							script_name, 
 							twin_number_sys_for_remove))
-						file_log:write(string.format("%s ОШИБКА!!! Не удалился twin tab[number_sys]: %s\n", 
+						file_log:write(string.format("%s ОШИБКА!!! Не удалился twin twin_number_sys_for_remove: %s\n", 
 							os.date(), 
 							twin_number_sys_for_remove))
 						ExitMess()
@@ -1128,6 +1132,16 @@ for ind_n, tab_n in pairs(trades_tbl) do
 										tostring(tab_n["datetime"])))
 end
 			end
+			table.sinsert(QUEUE_ONTRADE, {	order_num = trade.order_num,		-- при обработке twin удаляется строка таблицы
+											price = trade.price,
+											operation = saved_operation,
+											quantity_current = trade.qty,
+											twin = saved_twin,
+											account = saved_account,
+											client = saved_client,
+											instr_name = saved_instr_name,
+											instr_class = saved_instr_class,
+											profit = saved_profit })
 			if not ban_new_ord and saved_instr_name == instr_name then
 				OrdersVerification(base_price)
 			end
@@ -1158,12 +1172,11 @@ function OrdersVerification(b_price)
 				end
 			end
 			if not istwin then
-				PrintDbgStr(string.format("%s: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", script_name, tostring(tab["number_sys"])))
-				if tab["operation"] == 'B' then
-					SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
-				else
-					SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
-				end
+				PrintDbgStr(string.format("%s: ERROR: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", script_name, tostring(tab["number_sys"])))
+				file_log:write(string.format("%s ERROR: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s\n", script_name, tostring(tab["number_sys"])))
+				message(string.format("%s: ERROR: Обнаружена потеря twin'а. Нет twin'а у номера number_sys: %s", script_name, tostring(tab["number_sys"])))
+--[[				if tab["operation"] == 'B' then	SendTransBuySell(tab["price"] + profit, quantity, 'S', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"])
+				else SendTransBuySell(tab["price"] - profit, quantity, 'B', tab["number_sys"], tab["account"], tab["client"], tab["instr_name"], tab["instr_class"], tab["profit"]) end	]]
 			end
 		end
 	end
