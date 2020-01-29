@@ -1,5 +1,5 @@
 -- ticksaver
-version = 1.1
+version = 1.22
 
 -- модифицируемые параметры
 script_name = "ticksaver"
@@ -7,7 +7,7 @@ log_file_name = "ticksaver.log"
 ini_file_name = "ticksaver.ini"
 
 function OnInit()	-- событие - инициализация QUIK
-	PrintDbgStr(string.format("%s версия %05.3f: Событие - инициализация QUIK", script_name, version))
+	PrintDbgStr(string.format("%s версия %5.2f: Событие - инициализация QUIK", script_name, version))
 	scr_path = getScriptPath()
 	log_dir_path = scr_path .. "\\logs\\"
 	data_dir_path = scr_path .. "\\data\\"
@@ -28,8 +28,19 @@ function OnInit()	-- событие - инициализация QUIK
 	instrname = {}
 	instrfile = {}
 	instrclass = {}
+	f_last_price = 0
+	s_last_price = 0
+	local cnt = 0
 	file_ini = io.open(scr_path .. "\\" .. ini_file_name, "r")
 	if file_ini ~= nil then
+		diff = file_ini:read("*l")
+		PrintDbgStr(script_name .. ": Чтение " .. ini_file_name .. ". Нахождение разности: " .. diff)
+		file_log:write(os.date() .. " Чтение " .. ini_file_name .. ". Нахождение разности: " .. diff .. " \n")
+		if tostring(diff) == "false" then
+			diff = false
+		else
+			diff = true
+		end
 		for instr_name, instr_class in string.gmatch(file_ini:read("*a"), "(%w+) (%w+)") do
 			instrname[#instrname + 1] = instr_name
 			instrfile[#instrfile + 1] = io.open(string.format("%s%s_%s.csv", data_dir_path, instr_name, os.date("%Y%m%d_%H%M%S")), "w")
@@ -44,6 +55,7 @@ function OnInit()	-- событие - инициализация QUIK
 				PrintDbgStr(script_name .. ": Ошибка при заказе параметра LAST по инструменту " .. instr_name)
 				file_log:write(os.date() .. " Ошибка при заказе параметра LAST по инструменту " .. instr_name .. "\n")
 			end
+			cnt = cnt + 1
 		end
 		file_ini:close()
 	else
@@ -53,6 +65,12 @@ function OnInit()	-- событие - инициализация QUIK
 		file_log:write(os.date() .. script_name .. ": Ошибка загрузки " .. ini_file_name .. "\n")
 		return false
 	end
+	if cnt < 2 then
+		diff = false
+	end
+	if diff then
+		diff_file = io.open(string.format("%sdiff_%s.csv", data_dir_path, os.date("%Y%m%d_%H%M%S")), "w")
+	end
 end
 
 function OnParam(class, sec)
@@ -60,11 +78,16 @@ function OnParam(class, sec)
 		if class == instrclass[ind] and sec == instrname[ind] then
 			res = getParamEx(class, sec, "LAST")
 			if res ~= 0 then
-				PrintDbgStr(string.format("%s: %s: %.2f", script_name, sec, res.param_value))
+				PrintDbgStr(string.format("%s: %s %s %s: %.2f", script_name, os.date("%d.%m.%Y"), os.date("%H:%M:%S"), sec, res.param_value))
 				if instrfile[ind] ~= nil then
 					instrfile[ind]:write(string.format("%s,%s,%s,%.2f\n", os.date("%d.%m.%Y"), os.date("%H:%M:%S"), sec, res.param_value))		--os.date("%X",os.time())
 				else
 					file_log:write(string.format("%s %s: %.2f\n", os.date(), sec, res.param_value))
+				end
+				if ind == 1 then
+					f_last_price = res.param_value
+				elseif ind == 2 then
+					s_last_price = res.param_value
 				end
 			end
 			break
@@ -108,7 +131,15 @@ function main()
 	end
 	
 	while true do
-		sleep(1000)
+		sleep(60000)
+		if diff then
+			if tonumber(f_last_price) > 0 and tonumber(s_last_price) > 0 then
+				diff_file:write(string.format("%s,%s,%s,%s,%.2f\n", os.date("%d.%m.%Y"), os.date("%H:%M:%S"), instrname[1], instrname[2], tonumber(f_last_price)-tonumber(s_last_price)))
+				PrintDbgStr(string.format("%s: %s %s diff %s-%s: %.2f", script_name, os.date("%d.%m.%Y"), os.date("%H:%M:%S"), instrname[1], instrname[2], tonumber(f_last_price)-tonumber(s_last_price)))
+			end
+			f_last_price = 0
+			s_last_price = 0
+		end
 	end
 	exit_mess()
 end

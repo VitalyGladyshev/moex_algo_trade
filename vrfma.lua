@@ -1,5 +1,5 @@
 -- vrfma
-version = 1.043
+version = 1.044
 -- min_precision мен€ть руками!!!
 min_precision = 0.01
 
@@ -57,7 +57,7 @@ QUEUE_ONTRADE = {}
 ]]
 
 function OnInit()	-- событие - инициализаци€ QUIK
-	PrintDbgStr(string.format("%s верси€ %05.3f: —обытие - инициализаци€ QUIK", script_name, version))
+	PrintDbgStr(string.format("%s верси€ %5.3f: —обытие - инициализаци€ QUIK", script_name, version))
 	scr_path = getScriptPath()
 	log_dir_path = scr_path .. "\\logs\\"
 	local ok, err, code = os.rename(log_dir_path, log_dir_path)
